@@ -158,6 +158,40 @@ fn top_level_window(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn physical_video_bounds(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    scale_factor: f64,
+) -> Result<(i32, i32, u32, u32), String> {
+    if ![x, y, width, height, scale_factor]
+        .iter()
+        .all(|value| value.is_finite())
+        || width <= 0.0
+        || height <= 0.0
+        || scale_factor <= 0.0
+    {
+        return Err("native video bounds and scale factor must be finite and positive".into());
+    }
+
+    let clamp_coordinate =
+        |value: f64| value.clamp(i32::MIN as f64, i32::MAX as f64).round() as i32;
+    let left = clamp_coordinate((x * scale_factor).floor());
+    let top = clamp_coordinate((y * scale_factor).floor());
+    let right = clamp_coordinate(((x + width) * scale_factor).ceil());
+    let bottom = clamp_coordinate(((y + height) * scale_factor).ceil());
+    let physical_width = (i64::from(right) - i64::from(left))
+        .max(1)
+        .min(i64::from(u32::MAX)) as u32;
+    let physical_height = (i64::from(bottom) - i64::from(top))
+        .max(1)
+        .min(i64::from(u32::MAX)) as u32;
+
+    Ok((left, top, physical_width, physical_height))
+}
+
 fn is_supported_video_path(path: &std::path::Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
@@ -356,13 +390,14 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
 
     #[cfg(target_os = "linux")]
     {
-        if ![x, y, width, height].iter().all(|value| value.is_finite()) {
-            return Err("native video bounds must be finite".into());
-        }
-
         let window = app
             .get_webview_window(&window_label)
             .ok_or_else(|| format!("window '{window_label}' not found"))?;
+        let scale_factor = window
+            .scale_factor()
+            .map_err(|error| format!("could not get native window scale factor: {error}"))?;
+        let (mut x, mut y, width, height) =
+            physical_video_bounds(x, y, width, height, scale_factor)?;
         let handle = window
             .window_handle()
             .map_err(|error| format!("could not get native window handle: {error}"))?;
@@ -386,8 +421,6 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
             };
 
             if visible {
-                let mut x = x.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32;
-                let mut y = y.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32;
                 if mpv_parent != top_level {
                     let mut translated_x = 0;
                     let mut translated_y = 0;
@@ -407,8 +440,6 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
                         y = translated_y;
                     }
                 }
-                let width = width.max(1.0).round().min(u32::MAX as f64) as u32;
-                let height = height.max(1.0).round().min(u32::MAX as f64) as u32;
                 x11::xlib::XMoveResizeWindow(display, mpv_window, x, y, width, height);
                 x11::xlib::XMapRaised(display, mpv_window);
             } else {
@@ -564,7 +595,19 @@ pub async fn save_playlist_session<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    use super::physical_video_bounds;
     use super::{build_audio_filter, expand_drop_paths};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn converts_logical_video_edges_without_leaving_fractional_gaps() {
+        assert_eq!(
+            physical_video_bounds(10.25, 20.5, 100.5, 50.25, 1.25)
+                .expect("valid native video bounds"),
+            (12, 25, 127, 64)
+        );
+    }
 
     #[test]
     fn builds_one_lavfi_chain_for_all_bands() {

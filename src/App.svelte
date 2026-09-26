@@ -1392,16 +1392,15 @@
   function syncNativeVideoLayout(requirePlaying = false): void {
     if (browserMode || !windowActive || (requirePlaying && !isPlaying)) return;
 
-    const screen = document.querySelector<HTMLElement>(".screen-inner");
-    if (!screen) return;
+    const viewport = document.querySelector<HTMLElement>("[data-native-video-viewport]");
+    if (!viewport) return;
 
-    const rect = screen.getBoundingClientRect();
-    const pixelRatio = window.devicePixelRatio || 1;
+    const rect = viewport.getBoundingClientRect();
     const bounds = {
-      x: rect.left * pixelRatio,
-      y: rect.top * pixelRatio,
-      width: rect.width * pixelRatio,
-      height: rect.height * pixelRatio,
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
     };
     void syncMpvVideo(bounds, Boolean(get(playerStore).currentFile)).catch(() => undefined);
   }
@@ -1871,8 +1870,6 @@
       onEqualizerPreset={chooseEqualizerPreset}
       onEqualizerGain={changeEqualizerGain}
       {isFullscreen}
-      {resolution}
-      {mediaFormat}
       showCrtEffect={showCrtEffect}
       onToggleCrtEffect={toggleCrtEffect}
       onToggleMiniPlayer={enterMiniPlayer}

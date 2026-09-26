@@ -82,8 +82,6 @@
   export let onEqualizerPreset: (preset: Exclude<EqualizerPreset, "custom">) => void;
   export let onEqualizerGain: (index: number, gain: number) => void;
   export let isFullscreen: boolean;
-  export let resolution: string;
-  export let mediaFormat: string;
   export let showCrtEffect: boolean;
   export let onToggleCrtEffect: () => void;
   export let onToggleMiniPlayer: () => void;
@@ -118,6 +116,7 @@
   let drawerLayoutOpen = false;
   let stageElement: HTMLElement | undefined;
   let screenElement: HTMLElement | undefined;
+  let nativeVideoViewportElement: HTMLElement | undefined;
   let scaleFactor = 1;
   let resizeTimer: number | undefined;
   let speakerVisualizerTimer: number | undefined;
@@ -185,6 +184,7 @@
     updateScale();
     if (stageElement) resizeObserver?.observe(stageElement);
     if (screenElement) resizeObserver?.observe(screenElement);
+    if (nativeVideoViewportElement) resizeObserver?.observe(nativeVideoViewportElement);
     window.requestAnimationFrame(notifyNativeVideoLayout);
     window.addEventListener("resize", handleResize, { passive: true });
     return () => {
@@ -366,6 +366,8 @@
         <div class="screen-column">
           <div class="screen-bezel">
             <div bind:this={screenElement} class="screen-inner">
+              <div bind:this={nativeVideoViewportElement} class="native-video-viewport" data-native-video-viewport aria-hidden="true"></div>
+
               {#if browserMode && browserSource}
                 <video
                   bind:this={videoElement}
@@ -393,10 +395,6 @@
                   <span class="screen-empty-label">NO SIGNAL</span>
                   <button class="screen-open-button" type="button" onclick={onOpen}>OPEN VIDEO</button>
                 </div>
-              {:else}
-                <div class="media-overlay">
-                  <span class="media-status" role="status" aria-live="polite">{status === "error" ? message : status.toUpperCase()}</span>
-                </div>
               {/if}
 
               {#if showCrtEffect}
@@ -409,8 +407,6 @@
           <div class="bezel-info" aria-label="Playback metadata">
             <span class="bezel-status">{isFullscreen ? "FULLSCREEN" : status.toUpperCase()}</span>
             <span class="bezel-track" title={currentTrackName}>{currentTrackName || "NO MEDIA"}</span>
-            <span class="bezel-resolution">{resolution}</span>
-            <span class="bezel-format">{mediaFormat}</span>
             <button
               class:active={showCrtEffect}
               class="crt-status-toggle"
@@ -753,6 +749,12 @@
     object-fit: contain;
   }
 
+  .native-video-viewport {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
   .browser-error-overlay {
     align-items: flex-end;
     flex-direction: column;
@@ -842,7 +844,7 @@
 
   .bezel-info {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr) minmax(0, max-content) minmax(0, max-content) max-content;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
     align-items: center;
     gap: var(--tv-bezel-info-gap);
     width: 100%;

@@ -11,7 +11,7 @@ permissions:
 jobs:
   release:
     name: Build and release Linux packages
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
