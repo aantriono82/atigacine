@@ -561,7 +561,11 @@
     }
 
     if (!initialized) {
-      updatePlayer({ message: "Run the desktop build to start libmpv playback." });
+      updatePlayer({
+        status: "error",
+        buffering: false,
+        message: "Native libmpv is unavailable. Check the installed libmpv package and restart Atiga Cine.",
+      });
       return;
     }
 
@@ -1494,7 +1498,13 @@
       const nativeInitPromise = isTauriRuntime()
         ? init({ initialOptions: mpvOptions, observedProperties: OBSERVED_PROPERTIES })
         : Promise.resolve();
-      const [savedSession] = await Promise.all([sessionPromise, nativeInitPromise]);
+      let nativeInitError: unknown;
+      try {
+        await nativeInitPromise;
+      } catch (error) {
+        nativeInitError = error;
+      }
+      const savedSession = await sessionPromise;
       if (!active) {
         if (isTauriRuntime()) await destroy().catch(() => undefined);
         return;
@@ -1511,6 +1521,12 @@
         runtimeMessage = savedTrackCount > 0
           ? "Browser preview ready. Choose the files again to restore playback."
           : "Browser preview ready. Choose a local video to begin.";
+        return;
+      }
+
+      if (nativeInitError) {
+        runtimeMessage = `libmpv initialization failed: ${String(nativeInitError)}`;
+        updatePlayer({ initialized: false, status: "error", buffering: false, message: runtimeMessage });
         return;
       }
 

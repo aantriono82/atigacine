@@ -202,7 +202,6 @@
   $: layoutWidth = drawerIsOpen ? BASE_DESIGN_WIDTH + BASE_DRAWER_GAP + BASE_DRAWER_WIDTH : BASE_DESIGN_WIDTH;
   $: if (stageElement && layoutWidth) updateScale();
 
-  $: displayName = currentFile?.split(/[\\/]/).pop() ?? "NO MEDIA LOADED";
   $: safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
   $: safePosition = Math.min(Math.max(position, 0), safeDuration || 1);
   $: channelValue = channelCount > 0 ? Math.min(Math.max(currentChannel, 1), channelCount) : 0;
@@ -385,8 +384,7 @@
                 ></video>
                 {#if status === "error"}
                   <div class="media-overlay browser-error-overlay">
-                    <span class="media-status">{message}</span>
-                    <span class="media-name" title={currentFile}>{displayName}</span>
+                    <span class="media-status" role="status" aria-live="polite">{message}</span>
                   </div>
                 {/if}
               {:else if !currentFile}
@@ -397,8 +395,7 @@
                 </div>
               {:else}
                 <div class="media-overlay">
-                  <span class="media-status">{status === "error" ? message : status.toUpperCase()}</span>
-                  <span class="media-name" title={currentFile}>{displayName}</span>
+                  <span class="media-status" role="status" aria-live="polite">{status === "error" ? message : status.toUpperCase()}</span>
                 </div>
               {/if}
 
@@ -826,9 +823,7 @@
     right: var(--tv-screen-overlay-inset);
     bottom: var(--tv-screen-overlay-inset);
     left: var(--tv-screen-overlay-inset);
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
+    display: block;
     color: var(--tv-screen-muted);
     font: var(--tv-screen-overlay-size)/1 monospace;
     opacity: 0.9;
@@ -836,14 +831,13 @@
   }
 
   .media-status {
-    color: var(--tv-screen-glow);
-    font-weight: 700;
-  }
-
-  .media-name {
+    display: block;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--tv-screen-glow);
+    font-weight: 700;
   }
 
   .bezel-info {
