@@ -1,0 +1,19 @@
+:root,
+:root[data-theme="charcoal-amber"] {
+  --skin-window: #1c1c1b;
+  --skin-surface: #292825;
+  --skin-surface-raised: #34312b;
+  --skin-surface-deep: #121311;
+  --skin-border: #555047;
+  --skin-border-subtle: rgb(128 128 128 / 12%);
+  --skin-text: #e8e1d5;
+  --skin-text-muted: #a9a093;
+  --skin-accent: #d4a54b;
+  --skin-accent-strong: #f0c268;
+  --skin-accent-contrast: #211b11;
+  --skin-video: #070807;
+  --skin-overlay: rgb(20 18 14 / 88%);
+  --skin-shadow: rgb(0 0 0 / 50%);
+  --button-highlight: #746f65;
+  --button-shadow: #0b0c0b;
+}

@@ -1,0 +1,18 @@
+:root[data-theme="silver-classic"] {
+  --skin-window: #c4c6c8;
+  --skin-surface: #d9dbdc;
+  --skin-surface-raised: #eceeef;
+  --skin-surface-deep: #aeb2b5;
+  --skin-border: #73777a;
+  --skin-border-subtle: rgb(128 128 128 / 18%);
+  --skin-text: #202326;
+  --skin-text-muted: #555a5e;
+  --skin-accent: #245b93;
+  --skin-accent-strong: #3479bc;
+  --skin-accent-contrast: #ffffff;
+  --skin-video: #27292b;
+  --skin-overlay: rgb(236 238 239 / 92%);
+  --skin-shadow: rgb(32 35 38 / 28%);
+  --button-highlight: #ffffff;
+  --button-shadow: #54585b;
+}

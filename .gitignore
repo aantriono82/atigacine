@@ -1,0 +1,29 @@
+.DS_Store
+node_modules/
+/build
+dist/
+/target/
+*.deb
+*.rpm
+*.AppImage
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Development screenshots stay local and must never enter the public repo.
+.dev-screenshots/
+
+# Prevent ad hoc screenshots from accumulating at the project root.
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+
+# Keep the documented promotion screenshots trackable.
+!docs/
+!docs/screenshots/
+!docs/screenshots/**

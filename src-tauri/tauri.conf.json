@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "atiga-cine",
+  "version": "0.1.0",
+  "identifier": "com.atiga.cine",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Atiga Cine",
+        "width": 800,
+        "height": 600,
+        "decorations": false,
+        "transparent": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "license": "Apache-2.0",
+    "category": "Video",
+    "shortDescription": "Native Linux media player",
+    "longDescription": "Atiga Cine is a native Linux media player with a retro television interface and libmpv playback.",
+    "resources": [
+      "lib/**/*"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "packaging/atiga-cine.desktop.hbs"
+      },
+      "rpm": {
+        "desktopTemplate": "packaging/atiga-cine.desktop.hbs"
+      }
+    }
+  }
+}

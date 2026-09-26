@@ -1,0 +1,265 @@
+:root[data-theme="retro-tv"] {
+  --skin-window: #25130b;
+  --skin-surface: #48200e;
+  --skin-surface-raised: #6f3518;
+  --skin-surface-deep: #190b06;
+  --skin-border: #8c4b24;
+  --skin-border-subtle: rgb(238 180 111 / 18%);
+  --skin-text: #f0dfbd;
+  --skin-text-muted: #c39c72;
+  --skin-accent: #e9ad4f;
+  --skin-accent-strong: #ffd47c;
+  --skin-accent-contrast: #291205;
+  --skin-video: #101610;
+  --skin-overlay: rgb(37 15 7 / 90%);
+  --skin-shadow: rgb(12 4 1 / 70%);
+  --button-highlight: #f0c489;
+  --button-shadow: #241006;
+
+  --tv-stage-padding: clamp(0.45rem, 1vw, 0.9rem);
+  --tv-stage-padding-compact: 0.35rem;
+  --tv-stage-background: #211008;
+  --tv-text: #f0dfbd;
+  --tv-wood-color: #71300f;
+  --tv-wood-light: #aa4b1b;
+  --tv-wood-dark: #321005;
+  --tv-wood-deep: #1c0803;
+  --tv-wood-grain: rgb(35 8 2 / 38%);
+  --tv-wood-highlight: rgb(255 197 120 / 55%);
+  --tv-casing-radius: 1.15rem 1.4rem 1rem 1rem;
+  --tv-casing-max-width: 76rem;
+  --tv-casing-padding: clamp(0.55rem, 1.3vw, 1.1rem);
+  --tv-casing-border: clamp(0.3rem, 0.7vw, 0.65rem);
+  --tv-casing-shadow-y: 0.45rem;
+  --tv-casing-shadow-blur: 0.8rem;
+  --tv-shadow: rgb(14 4 1 / 72%);
+  --tv-foot-height: 0.75rem;
+  --tv-foot-width: 11%;
+  --tv-foot-radius: 0.18rem;
+  --tv-foot-inset: 8%;
+  --tv-foot-skew: -8deg;
+  --tv-foot-color: #4a1c0a;
+  --tv-foot-dark: #1e0803;
+
+  --tv-control-width: clamp(9.2rem, 25%, 14rem);
+  --tv-control-width-compact: 9.2rem;
+  --tv-panel-gap: clamp(0.55rem, 1.2vw, 1rem);
+  --tv-panel-padding: clamp(0.55rem, 1vw, 0.9rem);
+  --tv-panel-color: #4a200e;
+  --tv-panel-dark: #260c04;
+  --tv-panel-grain: rgb(20 5 1 / 38%);
+  --tv-panel-highlight: rgb(247 177 95 / 40%);
+  --tv-panel-shadow: rgb(13 3 0 / 72%);
+  --tv-panel-border: 0.18rem;
+  --tv-panel-text: #efd5a7;
+  --tv-panel-muted: #bb8859;
+  --tv-panel-accent: #ffd67f;
+
+  --tv-bezel-padding: clamp(0.55rem, 1.4vw, 1.25rem);
+  --tv-bezel-border: 0.12rem;
+  --tv-bezel-radius: 1.35rem 1.5rem 1.25rem 1.25rem;
+  --tv-bezel-cream: #e7d5ac;
+  --tv-bezel-highlight: #fff2ca;
+  --tv-bezel-shadow: #9d825b;
+  --tv-bezel-deep: #715c3d;
+  --tv-screen-border: 0.45rem;
+  --tv-screen-radius: 1.25rem 1.45rem 1.25rem 1.3rem;
+  --tv-screen-black: #080b09;
+  --tv-screen-color: #899b87;
+  --tv-screen-glass: rgb(226 243 207 / 20%);
+  --tv-screen-shadow: rgb(0 0 0 / 64%);
+  --tv-screen-text: #b4c99f;
+  --tv-screen-muted: #a3b89a;
+  --tv-screen-glow: #d2e9ae;
+  --tv-screen-empty-gap: 0.65rem;
+  --tv-screen-mark-size: 3.2rem;
+  --tv-screen-label-size: clamp(0.65rem, 1.1vw, 0.9rem);
+  --tv-screen-label-spacing: 0.2em;
+  --tv-open-button-padding: 0.45rem 0.6rem;
+  --tv-open-button-size: 0.58rem;
+  --tv-scanline: rgb(8 20 8 / 30%);
+  --tv-scanline-opacity: 0.35;
+  --tv-vignette: rgb(2 7 3 / 70%);
+  --tv-vignette-inner: rgb(4 12 4 / 30%);
+  --tv-screen-overlay-inset: 0.8rem;
+  --tv-screen-overlay-size: 0.58rem;
+  --tv-bezel-info-height: 1.35rem;
+  --tv-bezel-info-padding: 0.22rem 0.45rem;
+  --tv-bezel-info-gap: 0.5rem;
+  --tv-bezel-info-background: #c2af86;
+  --tv-bezel-info-text: #51391f;
+  --tv-bezel-info-accent: #8d2e0f;
+  --tv-bezel-info-size: 0.48rem;
+
+  --tv-lower-strip-height: clamp(4.6rem, 13%, 6.4rem);
+  --tv-lower-gap: clamp(0.45rem, 1vw, 0.85rem);
+  --tv-lower-padding: clamp(0.45rem, 0.8vw, 0.75rem);
+  --tv-lower-border: 0.12rem;
+  --tv-lower-text: #d1a26c;
+  --tv-button-gap: 0.22rem;
+  --tv-button-border: 0.12rem;
+  --tv-button-size: clamp(1.55rem, 3.2vw, 2.2rem);
+  --tv-button-label-size: clamp(0.48rem, 0.7vw, 0.62rem);
+  --tv-button-color: #3d3933;
+  --tv-button-highlight: #766c60;
+  --tv-button-top-highlight: rgb(255 247 222 / 48%);
+  --tv-button-dark: #120e0a;
+  --tv-button-shine: #c4b196;
+  --tv-button-shadow: #17120d;
+  --tv-button-text: #f3e8d0;
+  --tv-button-active-text: #ffd77d;
+  --tv-button-active-border: #f3bd5d;
+  --tv-round-button-gap: 0.12rem;
+  --tv-round-button-label-size: 0.5rem;
+  --tv-seek-label-gap: 0.4rem;
+  --tv-seek-label-margin: 0.25rem;
+  --tv-seek-label-size: 0.53rem;
+  --tv-seek-height: 0.85rem;
+  --tv-seek-track-height: 0.34rem;
+  --tv-seek-thumb-width: 0.52rem;
+  --tv-seek-thumb-height: 0.8rem;
+  --tv-seek-thumb-offset: -0.24rem;
+  --tv-seek-progress-color: #d89538;
+  --tv-seek-track: #2b150a;
+  --tv-seek-border: #170803;
+  --tv-seek-shadow: #170803;
+  --tv-seek-highlight: #cf8f52;
+  --tv-seek-thumb: #cbb697;
+  --tv-seek-thumb-border: #1b110a;
+  --tv-compact-lower-gap: 0.45rem;
+
+  --tv-utility-gap: 0.28rem;
+  --tv-utility-height: 1.55rem;
+  --tv-utility-padding: 0.25rem 0.35rem;
+
+  --tv-drawer-top: var(--tv-casing-padding);
+  --tv-drawer-bottom: calc(var(--tv-casing-padding) + var(--tv-foot-height) + var(--tv-bezel-info-height) + var(--tv-lower-strip-height) + var(--tv-lower-gap));
+  --tv-drawer-gap: clamp(0.65rem, 1.2vw, 0.95rem);
+  --tv-drawer-width: min(21rem, calc(100% - (2 * var(--tv-casing-padding))));
+  --tv-drawer-radius: 0.8rem;
+  --tv-drawer-background: #2b1006;
+  --tv-drawer-border: #c17a3b;
+  --tv-drawer-shadow: rgb(0 0 0 / 72%);
+
+  --tv-dial-gap: clamp(0.55rem, 1.2vw, 1rem);
+  --tv-dial-label-gap: 0.35rem;
+  --tv-dial-label-size: 0.58rem;
+  --tv-dial-label-spacing: 0.11em;
+  --tv-dial-help-size: 0.47rem;
+  --tv-dial-help-spacing: 0.1em;
+  --tv-screen-aspect-ratio: 4 / 3;
+  --tv-channel-dial-size: clamp(5.8rem, 58%, 8.4rem);
+  --tv-volume-dial-size: clamp(4.8rem, 48%, 6.8rem);
+  --tv-dial-inset: 0.4rem;
+  --tv-dial-metal: #aaa79b;
+  --tv-dial-dark: #302e2a;
+  --tv-dial-shine: rgb(255 255 255 / 58%);
+  --tv-dial-highlight: #ded8c5;
+  --tv-dial-shadow: #14120f;
+  --tv-dial-border: 0.18rem;
+  --tv-dial-tick: #e8c88f;
+  --tv-mask: #000;
+  --tv-dial-scale-label-inset: -0.28rem;
+  --tv-dial-scale-label-size: 0.54rem;
+  --tv-dial-scale-text: #fff2ca;
+  --tv-dial-scale-active-text: #ffffff;
+  --tv-dial-scale-active-glow: rgb(255 244 190 / 85%);
+  --tv-dial-indicator-inset: 16%;
+  --tv-dial-indicator-width: 0.18rem;
+  --tv-dial-indicator-height: 34%;
+  --tv-dial-indicator-origin: 1%;
+  --tv-dial-indicator-radius: 0.15rem;
+  --tv-dial-indicator: #3d1708;
+  --tv-dial-indicator-shadow: #fff0ba;
+  --tv-dial-center-size: 28%;
+  --tv-dial-center: #4e4a42;
+  --tv-dial-center-border: #e0d7c0;
+  --tv-dial-center-text: #f5e6c5;
+  --tv-dial-center-label-size: 0.56rem;
+
+  --tv-speaker-height: clamp(4.6rem, 20%, 7.5rem);
+  --tv-speaker-padding: 0.35rem;
+  --tv-speaker-texture: #272a28;
+  --tv-speaker-metal-highlight: #565b56;
+  --tv-speaker-dark: #101311;
+  --tv-speaker-light: rgb(255 255 255 / 18%);
+  --tv-speaker-frame: #151715;
+  --tv-speaker-shadow: rgb(0 0 0 / 78%);
+  --tv-speaker-hole: #080a09;
+  --tv-speaker-hole-edge: #71776f;
+  --tv-speaker-hole-glow: rgb(226 148 47 / 72%);
+  --tv-speaker-border: 0.16rem;
+  --tv-speaker-label-padding: 0.25rem 0.35rem;
+  --tv-speaker-label-size: 0.47rem;
+  --tv-speaker-label-spacing: 0.12em;
+  --tv-speaker-label-text: #ffe1a0;
+  --tv-speaker-label-background: rgb(10 13 12 / 88%);
+  --tv-audio-jack-size: 1.45rem;
+  --tv-audio-jack-gap: 0.64rem;
+  --tv-audio-jack-label-size: 0.6rem;
+  --tv-audio-jack-label-spacing: 0.11em;
+
+  --tv-drop-inset: 1rem;
+  --tv-drop-text: #fff0bd;
+  --tv-drop-background: rgb(47 15 5 / 92%);
+  --tv-drop-border: 0.15rem;
+  --tv-drop-border-color: #ffc86a;
+  --tv-drop-size: 0.72rem;
+  --tv-drop-spacing: 0.12em;
+  --tv-drop-outline: 0.15rem;
+  --tv-drop-outline-offset: 0.2rem;
+}
+
+:root[data-theme="retro-tv"] .app-shell {
+  background: transparent;
+}
+
+:root[data-theme="retro-tv"] .title-bar {
+  background: repeating-linear-gradient(166deg, transparent 0 6px, rgb(255 190 111 / 10%) 6px 8px), linear-gradient(180deg, var(--tv-wood-color), var(--tv-wood-dark));
+  border-color: var(--tv-wood-dark);
+  box-shadow: inset 0 1px 0 var(--tv-wood-highlight), 0 2px 7px var(--tv-shadow);
+}
+
+:root[data-theme="retro-tv"] .app-mark {
+  color: var(--tv-panel-accent);
+  background: var(--tv-wood-deep);
+  border-color: var(--tv-wood-light);
+}
+
+:root[data-theme="retro-tv"] .titlebar-title {
+  color: var(--tv-panel-accent);
+  font-family: monospace;
+  letter-spacing: 0.17em;
+}
+
+:root[data-theme="retro-tv"] .window-control {
+  color: var(--tv-panel-text);
+  border-left-color: rgb(255 219 165 / 16%);
+}
+
+:root[data-theme="retro-tv"] .window-control:hover,
+:root[data-theme="retro-tv"] .window-control:focus-visible {
+  color: var(--tv-panel-accent);
+  background: rgb(255 209 125 / 14%);
+}
+
+:root[data-theme="retro-tv"] .window-control-close:hover,
+:root[data-theme="retro-tv"] .window-control-close:focus-visible {
+  color: #fff2e5;
+  background: #9c321f;
+}
+
+:root[data-theme="retro-tv"] .app-menu-strip,
+:root[data-theme="retro-tv"] .status-bar {
+  background: var(--tv-wood-deep);
+  border-color: var(--tv-wood-dark);
+}
+
+:root[data-theme="retro-tv"] .workspace {
+  background: transparent;
+}
+
+:root[data-theme="retro-tv"] .playlist-panel {
+  background: linear-gradient(180deg, var(--tv-panel-color), var(--tv-panel-dark));
+  border-left-color: var(--tv-wood-dark);
+}
