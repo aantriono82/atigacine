@@ -61,8 +61,9 @@ export async function syncMpvVideo(
   bounds: { x: number; y: number; width: number; height: number },
   visible: boolean,
 ): Promise<void> {
+  const deviceScaleFactor = window.devicePixelRatio || 1;
   await invoke("sync_mpv_video", {
-    ...bounds,
+    bounds: { ...bounds, deviceScaleFactor },
     visible,
     windowLabel: getCurrentWindow().label,
   });

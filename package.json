@@ -1,6 +1,6 @@
 {
   "name": "atiga-cine",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A lightweight native video player for Linux",
   "type": "module",
   "scripts": {

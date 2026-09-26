@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cubicOut } from "svelte/easing";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { fly } from "svelte/transition";
   import DialScale from "./DialScale.svelte";
   import Equalizer from "./Equalizer.svelte";
@@ -109,7 +109,6 @@
   const SCALE_MIN = 0.65;
   const SCALE_MAX = 1.9;
   const SAFE_VIEWPORT_MARGIN = 24;
-  const RESIZE_DEBOUNCE_MS = 180;
 
   let dialDrag: DialDrag | null = null;
   let playlistOpen = false;
@@ -118,7 +117,7 @@
   let screenElement: HTMLElement | undefined;
   let nativeVideoViewportElement: HTMLElement | undefined;
   let scaleFactor = 1;
-  let resizeTimer: number | undefined;
+  let resizeFrame: number | undefined;
   let speakerVisualizerTimer: number | undefined;
   let mounted = false;
   const speakerHoles = Array.from({ length: 40 }, (_, index) => index);
@@ -166,34 +165,31 @@
   onMount(() => {
     mounted = true;
     startSpeakerVisualizer();
-    const notifyNativeVideoLayout = (): void => {
-      onNativeVideoLayout();
-    };
-    const handleResize = (): void => {
-      if (resizeTimer) window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => {
-        resizeTimer = undefined;
+    const scheduleLayoutUpdate = (): void => {
+      if (resizeFrame !== undefined) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = undefined;
         updateScale();
-        window.requestAnimationFrame(notifyNativeVideoLayout);
-      }, RESIZE_DEBOUNCE_MS);
+        void tick().then(onNativeVideoLayout);
+      });
     };
     const resizeObserver = !browserMode && typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(notifyNativeVideoLayout)
+      ? new ResizeObserver(scheduleLayoutUpdate)
       : undefined;
 
     updateScale();
     if (stageElement) resizeObserver?.observe(stageElement);
     if (screenElement) resizeObserver?.observe(screenElement);
     if (nativeVideoViewportElement) resizeObserver?.observe(nativeVideoViewportElement);
-    window.requestAnimationFrame(notifyNativeVideoLayout);
-    window.addEventListener("resize", handleResize, { passive: true });
+    scheduleLayoutUpdate();
+    window.addEventListener("resize", scheduleLayoutUpdate, { passive: true });
     return () => {
       mounted = false;
       stopSpeakerVisualizer();
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", scheduleLayoutUpdate);
       resizeObserver?.disconnect();
-      if (resizeTimer) window.clearTimeout(resizeTimer);
-      resizeTimer = undefined;
+      if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = undefined;
     };
   });
 

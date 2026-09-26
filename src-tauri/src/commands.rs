@@ -164,24 +164,29 @@ fn physical_video_bounds(
     y: f64,
     width: f64,
     height: f64,
-    scale_factor: f64,
+    device_scale_factor: f64,
 ) -> Result<(i32, i32, u32, u32), String> {
-    if ![x, y, width, height, scale_factor]
+    if ![x, y, width, height, device_scale_factor]
         .iter()
         .all(|value| value.is_finite())
         || width <= 0.0
         || height <= 0.0
-        || scale_factor <= 0.0
+        || device_scale_factor <= 0.0
     {
-        return Err("native video bounds and scale factor must be finite and positive".into());
+        return Err(
+            "native video bounds and device scale factor must be finite and positive".into(),
+        );
     }
 
     let clamp_coordinate =
         |value: f64| value.clamp(i32::MIN as f64, i32::MAX as f64).round() as i32;
-    let left = clamp_coordinate((x * scale_factor).floor());
-    let top = clamp_coordinate((y * scale_factor).floor());
-    let right = clamp_coordinate(((x + width) * scale_factor).ceil());
-    let bottom = clamp_coordinate(((y + height) * scale_factor).ceil());
+    // DOMRect is expressed in post-transform CSS pixels. X11 expects physical
+    // pixels, so use the WebView's DPR from the same layout snapshot. Expanding
+    // the outer edges avoids a one-pixel seam at fractional TV scale factors.
+    let left = clamp_coordinate((x * device_scale_factor).floor());
+    let top = clamp_coordinate((y * device_scale_factor).floor());
+    let right = clamp_coordinate(((x + width) * device_scale_factor).ceil());
+    let bottom = clamp_coordinate(((y + height) * device_scale_factor).ceil());
     let physical_width = (i64::from(right) - i64::from(left))
         .max(1)
         .min(i64::from(u32::MAX)) as u32;
@@ -372,19 +377,26 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
     .map_err(|error| format!("thumbnail task failed: {error}"))?
 }
 
-#[tauri::command]
-pub fn sync_mpv_video<R: tauri::Runtime>(
-    app: AppHandle<R>,
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeVideoBounds {
     x: f64,
     y: f64,
     width: f64,
     height: f64,
+    device_scale_factor: f64,
+}
+
+#[tauri::command]
+pub fn sync_mpv_video<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    bounds: NativeVideoBounds,
     visible: bool,
     window_label: String,
 ) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (app, x, y, width, height, visible, window_label);
+        let _ = (app, bounds, visible, window_label);
         return Ok(());
     }
 
@@ -393,11 +405,13 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
         let window = app
             .get_webview_window(&window_label)
             .ok_or_else(|| format!("window '{window_label}' not found"))?;
-        let scale_factor = window
-            .scale_factor()
-            .map_err(|error| format!("could not get native window scale factor: {error}"))?;
-        let (mut x, mut y, width, height) =
-            physical_video_bounds(x, y, width, height, scale_factor)?;
+        let (mut x, mut y, width, height) = physical_video_bounds(
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
+            bounds.device_scale_factor,
+        )?;
         let handle = window
             .window_handle()
             .map_err(|error| format!("could not get native window handle: {error}"))?;
@@ -421,13 +435,13 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
             };
 
             if visible {
-                if mpv_parent != top_level {
+                if mpv_parent != parent {
                     let mut translated_x = 0;
                     let mut translated_y = 0;
                     let mut translated_child = 0;
                     if x11::xlib::XTranslateCoordinates(
                         display,
-                        top_level,
+                        parent,
                         mpv_parent,
                         x,
                         y,
@@ -607,6 +621,33 @@ mod tests {
                 .expect("valid native video bounds"),
             (12, 25, 127, 64)
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn converts_transformed_css_bounds_at_common_device_scales() {
+        let css_bounds = (107.25, 82.5, 593.75, 438.25);
+
+        assert_eq!(
+            physical_video_bounds(css_bounds.0, css_bounds.1, css_bounds.2, css_bounds.3, 1.0),
+            Ok((107, 82, 594, 439))
+        );
+        assert_eq!(
+            physical_video_bounds(css_bounds.0, css_bounds.1, css_bounds.2, css_bounds.3, 1.25),
+            Ok((134, 103, 743, 548))
+        );
+        assert_eq!(
+            physical_video_bounds(css_bounds.0, css_bounds.1, css_bounds.2, css_bounds.3, 2.0),
+            Ok((214, 165, 1188, 877))
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rejects_invalid_layout_snapshots() {
+        assert!(physical_video_bounds(0.0, 0.0, 0.0, 100.0, 1.0).is_err());
+        assert!(physical_video_bounds(0.0, 0.0, 100.0, 100.0, 0.0).is_err());
+        assert!(physical_video_bounds(f64::NAN, 0.0, 100.0, 100.0, 1.0).is_err());
     }
 
     #[test]

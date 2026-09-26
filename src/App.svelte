@@ -85,7 +85,6 @@
   let browserSource: string | null = null;
   const browserSources = new SvelteMap<string, string>();
   let runtimeMessage = "Starting native player...";
-  let importProgress: { current: number; total: number } | null = null;
   type DropZone = "screen" | "playlist";
   let dropZone: DropZone = "screen";
   let browserOpenShouldPlay = true;
@@ -131,8 +130,6 @@
 
   $: isPlaying = $playerStore.status === "playing";
   $: windowActive = windowFocused && documentVisible && !windowMinimized;
-  $: resolution = $playerStore.width && $playerStore.height ? `${$playerStore.width}×${$playerStore.height}` : "—";
-  $: mediaFormat = [$playerStore.format, $playerStore.videoCodec, $playerStore.audioCodec].filter(Boolean).join(" · ") || "—";
   $: currentPlaylistIndex = standaloneItem ? -1 : $activePlaylistStore?.items.findIndex((item) => item.id === $currentItemId) ?? -1;
   $: currentChannel = currentPlaylistIndex >= 0 ? currentPlaylistIndex + 1 : 0;
   $: currentTrackName = standaloneItem?.name ?? (currentPlaylistIndex >= 0 ? $activePlaylistStore?.items[currentPlaylistIndex]?.name ?? "" : "");
@@ -611,13 +608,10 @@
 
     rememberRecentPaths(validPaths);
 
-    importProgress = { current: 0, total: validPaths.length };
     for (let index = 0; index < validPaths.length; index += batchSize) {
       added.push(...addPaths(validPaths.slice(index, index + batchSize)));
-      importProgress = { current: Math.min(index + batchSize, validPaths.length), total: validPaths.length };
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     }
-    importProgress = null;
 
     if (added.length === 0) {
       runtimeMessage = "Those files are already in the playlist.";
@@ -640,7 +634,6 @@
 
     rememberRecentPaths(files.map((file) => file.name));
 
-    importProgress = { current: 0, total: files.length };
     for (let index = 0; index < files.length; index += batchSize) {
       const batch = files.slice(index, index + batchSize);
       const batchItems = addPaths(batch.map((file) => file.name));
@@ -661,10 +654,8 @@
         added.push(item);
       }
 
-      importProgress = { current: Math.min(index + batchSize, files.length), total: files.length };
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     }
-    importProgress = null;
 
     if (added.length === 0) {
       runtimeMessage = "Those files are already in the playlist.";
@@ -1779,22 +1770,8 @@
   aria-label="Choose subtitle file"
 /> 
 
-<main class:browser-preview={browserMode} class="app-shell" ondragover={handleBrowserDragOver} ondrop={handleBrowserDrop} ondragleave={handleBrowserDragLeave}>
+<main class="app-shell" ondragover={handleBrowserDragOver} ondrop={handleBrowserDrop} ondragleave={handleBrowserDragLeave}>
   <TitleBar />
-  {#if browserMode}
-    <div class="app-menu-strip">
-      <span class="runtime-led" class:ready={initialized}></span>
-      <span>WEBVIEW PREVIEW</span>
-      {#if importProgress}
-        <span class="import-progress" aria-label={`Importing ${importProgress.current} of ${importProgress.total}`}>
-          <span style={`width: ${(importProgress.current / importProgress.total) * 100}%`}></span>
-        </span>
-        <span class="strip-message">IMPORTING {importProgress.current}/{importProgress.total}</span>
-      {:else}
-        <span class="strip-message">{runtimeMessage}</span>
-      {/if}
-    </div>
-  {/if}
 
   <div class="workspace retro-workspace">
     <PlayerRetroTV
@@ -1878,13 +1855,5 @@
     />
   </div>
 
-  {#if browserMode}
-    <footer class="status-bar">
-      <span class="status-message" title={$playerStore.message}>{$playerStore.message}</span>
-      <span>{$playerStore.currentFile ? $playerStore.currentFile.split(/[\\/]/).pop() : "No file"}</span>
-      <span>{resolution}</span>
-      <span title={mediaFormat}>{mediaFormat}</span>
-    </footer>
-  {/if}
 </main>
 {/if}

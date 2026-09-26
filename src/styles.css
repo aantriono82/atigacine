@@ -62,10 +62,6 @@ select:focus-visible {
   background: transparent;
 }
 
-.app-shell.browser-preview {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-}
-
 .title-bar {
   position: relative;
   z-index: 20;
