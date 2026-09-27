@@ -43,15 +43,6 @@ export const mpvOptions = {
   "audio-pitch-correction": "yes",
 } as const;
 
-export async function getMpvContainerWid(windowLabel: string): Promise<number | undefined> {
-  try {
-    const wid = await invoke<number>("prepare_mpv_container", { windowLabel });
-    return typeof wid === "number" && wid > 0 ? wid : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export { command, destroy, init, listenEvents, observeProperties, setProperty };
 
 export async function setEqualizer(enabled: boolean, gains: readonly number[], normalize: boolean): Promise<void> {

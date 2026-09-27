@@ -10,7 +10,6 @@
   import {
     command,
     destroy,
-    getMpvContainerWid,
     init,
     listenEvents,
     mpvOptions,
@@ -1486,21 +1485,8 @@
 
     const start = async () => {
       const sessionPromise = loadSession().catch(() => ({ playlists: [], activePlaylistId: null }));
-
-      // On Linux, create a dedicated X11 child window first so that MPV embeds
-      // into a container we control. Resizing the container makes MPV's own
-      // event loop update its viewport (no stale osd-dimensions issue).
-      let effectiveMpvOptions: typeof mpvOptions | (typeof mpvOptions & { wid: number }) =
-        mpvOptions;
-      if (isTauriRuntime()) {
-        const wid = await getMpvContainerWid(getCurrentWindow().label).catch(() => undefined);
-        if (wid !== undefined) {
-          effectiveMpvOptions = { ...mpvOptions, wid };
-        }
-      }
-
       const nativeInitPromise = isTauriRuntime()
-        ? init({ initialOptions: effectiveMpvOptions, observedProperties: OBSERVED_PROPERTIES })
+        ? init({ initialOptions: mpvOptions, observedProperties: OBSERVED_PROPERTIES })
         : Promise.resolve();
       let nativeInitError: unknown;
       try {
