@@ -32,6 +32,10 @@ export const mpvOptions = {
   "force-window": "yes",
   "keep-open": "yes",
   keepaspect: "yes",
+  // Let the embedded child window follow the responsive TV viewport. mpv
+  // keeps the video's aspect ratio inside that viewport and supplies the
+  // letterbox area, which matches the browser preview's object-fit: contain.
+  "keepaspect-window": "no",
   "video-align-x": 0,
   "video-align-y": 0,
   panscan: 0,
