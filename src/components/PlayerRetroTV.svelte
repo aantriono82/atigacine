@@ -10,6 +10,9 @@
   import type { RecentFile } from "../lib/recent";
   import type { PlaybackStatus, Playlist as PlaylistModel, PlaylistItem, RepeatMode } from "../types";
 
+  // Injected by vite.config.ts `define` at build/dev time (from package.json).
+  const APP_VERSION: string = __APP_VERSION__;
+
   export let currentFile: string | null;
   export let status: PlaybackStatus;
   export let message: string;
@@ -558,6 +561,7 @@
             <div class="panel-brand-copy">
               <span class="panel-brand-name">ATIGA CINE</span>
               <span class="panel-brand-subtitle">NATIVE MEDIA PLAYER</span>
+              <span class="panel-brand-version" title="Version {APP_VERSION}">v{APP_VERSION}</span>
             </div>
           </div>
         </aside>
@@ -711,6 +715,9 @@
   }
 
   .screen-bezel {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
     width: 100%;
     aspect-ratio: var(--tv-screen-aspect-ratio);
     box-sizing: border-box;
@@ -726,8 +733,9 @@
   .screen-inner {
     position: relative;
     display: grid;
+    /* height: auto so WebKitGTK respects .screen-bezel padding (content-box, not border-box) */
+    height: auto;
     min-height: 0;
-    height: 100%;
     overflow: hidden;
     background: var(--tv-screen-color);
     border: var(--tv-screen-border) solid var(--tv-screen-black);
@@ -1481,6 +1489,20 @@
     letter-spacing: 0.1em;
     text-align: center;
     white-space: nowrap;
+  }
+
+  .panel-brand-version {
+    width: 100%;
+    overflow: hidden;
+    color: var(--tv-panel-accent);
+    font: 600 0.46rem/1 monospace;
+    letter-spacing: 0.08em;
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0.7;
+    margin-top: 2px;
+    padding-top: 2px;
+    border-top: 1px solid rgb(255 219 165 / 18%);
   }
 
   .side-drawer {

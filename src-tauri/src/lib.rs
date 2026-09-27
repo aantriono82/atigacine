@@ -16,6 +16,7 @@ pub fn run() {
             commands::set_playback_speed,
             commands::cancel_thumbnail_capture,
             commands::capture_thumbnail,
+            commands::prepare_mpv_container,
             commands::sync_mpv_video
         ])
         .run(tauri::generate_context!())

@@ -34,12 +34,23 @@ export const mpvOptions = {
   keepaspect: "yes",
   "video-align-x": 0,
   "video-align-y": 0,
+  panscan: 0,
+  "video-unscaled": "no",
   idle: "yes",
   "sub-auto": "exact",
   "osd-level": 0,
   // Keep mpv's native time-stretching active so speed changes preserve pitch.
   "audio-pitch-correction": "yes",
 } as const;
+
+export async function getMpvContainerWid(windowLabel: string): Promise<number | undefined> {
+  try {
+    const wid = await invoke<number>("prepare_mpv_container", { windowLabel });
+    return typeof wid === "number" && wid > 0 ? wid : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export { command, destroy, init, listenEvents, observeProperties, setProperty };
 

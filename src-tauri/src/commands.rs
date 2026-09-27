@@ -377,6 +377,76 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
     .map_err(|error| format!("thumbnail task failed: {error}"))?
 }
 
+#[cfg(target_os = "linux")]
+static MPV_CONTAINERS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, x11::xlib::Window>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+#[tauri::command]
+pub fn prepare_mpv_container<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<i64, String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, window_label);
+        Ok(0)
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut map = MPV_CONTAINERS
+            .lock()
+            .map_err(|_| "failed to lock MPV containers map".to_string())?;
+
+        if let Some(&container) = map.get(&window_label) {
+            return Ok(container as i64);
+        }
+
+        let window = app
+            .get_webview_window(&window_label)
+            .ok_or_else(|| format!("window '{window_label}' not found"))?;
+        let handle = window
+            .window_handle()
+            .map_err(|error| format!("could not get native window handle: {error}"))?;
+        let parent = match handle.as_raw() {
+            RawWindowHandle::Xlib(handle) => handle.window,
+            RawWindowHandle::Xcb(handle) => handle.window.get() as x11::xlib::Window,
+            _ => return Ok(0),
+        };
+
+        let display = unsafe { x11::xlib::XOpenDisplay(ptr::null()) };
+        if display.is_null() {
+            return Err("could not open X11 display".into());
+        }
+
+        unsafe {
+            // Create a dedicated child subwindow of the main X11 window.
+            // MPV will be embedded directly into this container via --wid.
+            // When sync_mpv_video resizes this container, MPV's event loop
+            // observes the resize of its parent window and automatically adjusts
+            // its internal viewport, aspect ratio, and letterboxing with zero offset.
+            let container = x11::xlib::XCreateSimpleWindow(
+                display,
+                parent,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0,
+            );
+            x11::xlib::XMapWindow(display, container);
+            x11::xlib::XFlush(display);
+            x11::xlib::XCloseDisplay(display);
+
+            map.insert(window_label, container);
+            Ok(container as i64)
+        }
+    }
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeVideoBounds {
@@ -428,13 +498,22 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
         }
 
         unsafe {
-            let top_level = top_level_window(display, parent);
-            let Some((mpv_window, mpv_parent)) = find_mpv_window(display, top_level) else {
-                x11::xlib::XCloseDisplay(display);
-                return Ok(());
+            let container = {
+                let map = MPV_CONTAINERS
+                    .lock()
+                    .map_err(|_| "failed to lock MPV containers map".to_string())?;
+                map.get(&window_label).copied()
             };
 
-            if visible {
+            let target_window = if let Some(container) = container {
+                container
+            } else {
+                let top_level = top_level_window(display, parent);
+                let Some((mpv_window, mpv_parent)) = find_mpv_window(display, top_level) else {
+                    x11::xlib::XCloseDisplay(display);
+                    return Ok(());
+                };
+
                 if mpv_parent != parent {
                     let mut translated_x = 0;
                     let mut translated_y = 0;
@@ -454,10 +533,14 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
                         y = translated_y;
                     }
                 }
-                x11::xlib::XMoveResizeWindow(display, mpv_window, x, y, width, height);
-                x11::xlib::XMapRaised(display, mpv_window);
+                mpv_window
+            };
+
+            if visible {
+                x11::xlib::XMoveResizeWindow(display, target_window, x, y, width, height);
+                x11::xlib::XMapRaised(display, target_window);
             } else {
-                x11::xlib::XUnmapWindow(display, mpv_window);
+                x11::xlib::XUnmapWindow(display, target_window);
             }
             x11::xlib::XFlush(display);
             x11::xlib::XCloseDisplay(display);
