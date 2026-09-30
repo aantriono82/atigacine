@@ -5,8 +5,6 @@ use std::sync::{
 };
 
 #[cfg(target_os = "linux")]
-use std::collections::HashMap;
-#[cfg(target_os = "linux")]
 use std::ffi::CStr;
 #[cfg(target_os = "linux")]
 use std::os::raw::c_void;
@@ -379,10 +377,6 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
     .map_err(|error| format!("thumbnail task failed: {error}"))?
 }
 
-#[cfg(target_os = "linux")]
-static MPV_CONTAINERS: std::sync::LazyLock<Mutex<HashMap<String, x11::xlib::Window>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
-
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeVideoBounds {
@@ -411,7 +405,7 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
         let window = app
             .get_webview_window(&window_label)
             .ok_or_else(|| format!("window '{window_label}' not found"))?;
-        let (x, y, width, height) = physical_video_bounds(
+        let (mut x, mut y, width, height) = physical_video_bounds(
             bounds.x,
             bounds.y,
             bounds.width,
@@ -440,40 +434,37 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
                 return Ok(());
             };
 
-            // libmpv creates its own child window for --wid. Moving that child
-            // directly can leave libmpv's internal video viewport at its old
-            // size after a CSS transform or window resize. Reparent it once to
-            // a native container we control, then resize the container. libmpv
-            // receives a normal parent resize and recalculates its letterbox
-            // geometry, keeping the video centered in the responsive viewport.
-            let container = {
-                let mut containers = MPV_CONTAINERS
-                    .lock()
-                    .map_err(|_| "failed to lock MPV containers map".to_string())?;
-                if let Some(&container) = containers.get(&window_label) {
-                    container
-                } else {
-                    let container =
-                        x11::xlib::XCreateSimpleWindow(display, parent, 0, 0, 1, 1, 0, 0, 0);
-                    if container == 0 {
-                        x11::xlib::XCloseDisplay(display);
-                        return Err("could not create native MPV video container".into());
-                    }
-                    containers.insert(window_label.clone(), container);
-                    container
+            // Keep libmpv's native child attached to the window created by the
+            // plugin. Reparenting that child after initialization can stop
+            // libmpv's X11 video and audio pipeline on some Linux/WebKitGTK
+            // combinations, leaving the frontend stuck at LOADING. Translate
+            // the viewport coordinates into the child's current parent and
+            // resize the child directly instead.
+            if mpv_parent != parent {
+                let mut translated_x = 0;
+                let mut translated_y = 0;
+                let mut translated_child = 0;
+                if x11::xlib::XTranslateCoordinates(
+                    display,
+                    parent,
+                    mpv_parent,
+                    x,
+                    y,
+                    &mut translated_x,
+                    &mut translated_y,
+                    &mut translated_child,
+                ) != 0
+                {
+                    x = translated_x;
+                    y = translated_y;
                 }
-            };
-
-            if mpv_parent != container {
-                x11::xlib::XReparentWindow(display, mpv_window, container, 0, 0);
             }
 
             if visible {
-                x11::xlib::XMoveResizeWindow(display, container, x, y, width, height);
-                x11::xlib::XMapRaised(display, container);
+                x11::xlib::XMoveResizeWindow(display, mpv_window, x, y, width, height);
                 x11::xlib::XMapRaised(display, mpv_window);
             } else {
-                x11::xlib::XUnmapWindow(display, container);
+                x11::xlib::XUnmapWindow(display, mpv_window);
             }
             x11::xlib::XFlush(display);
             x11::xlib::XCloseDisplay(display);

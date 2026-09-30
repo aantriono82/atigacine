@@ -1,6 +1,6 @@
 {
   "name": "atiga-cine",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A lightweight native video player for Linux",
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "test:unit": "cargo test --manifest-path src-tauri/Cargo.toml --all-targets",
     "verify": "pnpm lint && pnpm lint:rust && pnpm test:unit && pnpm check && pnpm build",
     "tauri:dev": "LD_LIBRARY_PATH=./src-tauri/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} tauri dev",
-    "tauri:build": "APPIMAGE_EXTRACT_AND_RUN=1 tauri build",
+    "tauri:build": "bash scripts/build-appimage.sh",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
