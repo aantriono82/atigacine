@@ -55,6 +55,29 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Read changelog entry
+        id: changelog
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="$(awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { in_section = 1; next }
+            in_section && /^## \[/ { exit }
+            in_section && /^\[[^]]+\]:/ { exit }
+            in_section { print }
+          ' CHANGELOG.md)"
+
+          if [[ -z "${notes//[[:space:]]/}" ]]; then
+            echo "No changelog entry found for ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+
+          {
+            echo 'body<<CHANGELOG_BODY'
+            printf '%s\n\nDownload the Linux packages from the assets below.\n' "$notes"
+            echo 'CHANGELOG_BODY'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0.6.2
         env:
@@ -63,7 +86,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Atiga Cine ${{ github.ref_name }}
-          releaseBody: See the assets below to download and install Atiga Cine for Linux.
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           tauriScript: pnpm tauri

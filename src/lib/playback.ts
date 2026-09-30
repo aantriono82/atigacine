@@ -1,6 +1,6 @@
 import type { RepeatMode } from "../types";
 
-const STORAGE_KEY = "atiga-cine-playback";
+const STORAGE_KEY = `atiga-cine-v${__APP_VERSION__}-playback`;
 
 export interface TrackPlaybackPosition {
   playlistId: string;

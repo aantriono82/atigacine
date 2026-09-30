@@ -2,8 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_PLAYLIST_ID, DEFAULT_PLAYLIST_NAME } from "../stores/playlistStore";
 import type { PlaylistItem, PlaylistSession } from "../types";
 
-const STORAGE_KEY = "atiga-cine-session";
-const LEGACY_STORAGE_KEY = "atiga-cine-playlist";
+const STORAGE_KEY = `atiga-cine-v${__APP_VERSION__}-session`;
 
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -36,7 +35,7 @@ export async function loadSession(): Promise<PlaylistSession> {
   }
 
   try {
-    const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? migrateSession(JSON.parse(stored)) : migrateSession(null);
   } catch {
     return migrateSession(null);

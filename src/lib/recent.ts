@@ -7,7 +7,7 @@ export interface RecentFile {
 }
 
 export const MAX_RECENT_FILES = 20;
-const STORAGE_KEY = "atiga-cine-recent-files";
+const STORAGE_KEY = `atiga-cine-v${__APP_VERSION__}-recent-files`;
 
 export function loadRecentFiles(): RecentFile[] {
   if (typeof localStorage === "undefined") return [];
