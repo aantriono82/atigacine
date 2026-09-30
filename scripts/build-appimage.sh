@@ -12,13 +12,37 @@ APPIMAGE_PLUGIN="${APPIMAGE_PLUGIN:-$TAURI_CACHE_DIR/linuxdeploy-plugin-appimage
 BUNDLE_DIR="$PROJECT_ROOT/src-tauri/target/release/bundle/appimage"
 APPDIR="$BUNDLE_DIR/atiga-cine.AppDir"
 
-for tool in "$LINUXDEPLOY" "$GTK_PLUGIN" "$APPIMAGE_PLUGIN"; do
-  if [[ ! -f "$tool" ]]; then
-    echo "Missing AppImage build tool: $tool" >&2
-    echo "Run the Tauri bundler once with network access so its tools can be downloaded, then retry." >&2
+download_tool() {
+  local destination="$1"
+  local url="$2"
+
+  if [[ -f "$destination" ]]; then
+    chmod +x "$destination"
+    return
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required to download AppImage build tools" >&2
     exit 1
   fi
-done
+
+  mkdir -p "$(dirname "$destination")"
+  echo "Downloading $(basename "$destination")..."
+  curl --fail --location --silent --show-error --retry 3 --retry-delay 2 \
+    "$url" --output "$destination.download"
+  chmod +x "$destination.download"
+  mv "$destination.download" "$destination"
+}
+
+download_tool \
+  "$LINUXDEPLOY" \
+  "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"
+download_tool \
+  "$GTK_PLUGIN" \
+  "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
+download_tool \
+  "$APPIMAGE_PLUGIN" \
+  "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage"
 
 # linuxdeploy spends a long time asking dpkg for copyright metadata for every
 # copied library. The metadata is unrelated to runtime loading and can make
