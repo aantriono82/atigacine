@@ -606,7 +606,9 @@
 
   .native-video-viewport {
     position: absolute;
-    inset: 0;
+    /* Leave the glass highlight ring visible around the native video. */
+    inset: var(--tv-screen-video-inset, 0);
+    border-radius: var(--tv-screen-video-radius, 0);
     pointer-events: none;
   }
 

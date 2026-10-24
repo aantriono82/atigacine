@@ -64,6 +64,9 @@
   --tv-bezel-deep: #715c3d;
   --tv-screen-border: 0.45rem;
   --tv-screen-radius: 1.25rem 1.45rem 1.25rem 1.3rem;
+  /* Screen radius minus the border and inset, so the video follows the rim. */
+  --tv-screen-video-inset: 2px;
+  --tv-screen-video-radius: calc(0.8rem - 2px) calc(1rem - 2px) calc(0.8rem - 2px) calc(0.85rem - 2px);
   --tv-screen-black: #080b09;
   --tv-screen-color: #899b87;
   --tv-screen-glass: rgb(226 243 207 / 20%);

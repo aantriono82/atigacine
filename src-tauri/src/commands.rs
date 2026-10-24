@@ -200,6 +200,108 @@ fn physical_video_bounds(
     Ok((left, top, physical_width, physical_height))
 }
 
+#[cfg(target_os = "linux")]
+#[link(name = "Xext")]
+extern "C" {
+    fn XShapeQueryExtension(
+        display: *mut x11::xlib::Display,
+        event_base: *mut std::os::raw::c_int,
+        error_base: *mut std::os::raw::c_int,
+    ) -> x11::xlib::Bool;
+    fn XShapeCombineRectangles(
+        display: *mut x11::xlib::Display,
+        dest: x11::xlib::Window,
+        dest_kind: std::os::raw::c_int,
+        x_off: std::os::raw::c_int,
+        y_off: std::os::raw::c_int,
+        rectangles: *mut x11::xlib::XRectangle,
+        n_rects: std::os::raw::c_int,
+        op: std::os::raw::c_int,
+        ordering: std::os::raw::c_int,
+    );
+}
+
+/// Clips the native video host to a rounded rectangle so the TV screen's
+/// curved rim, drawn by the webview underneath, stays visible.
+#[cfg(target_os = "linux")]
+unsafe fn shape_video_host(
+    display: *mut x11::xlib::Display,
+    host: x11::xlib::Window,
+    width: u32,
+    height: u32,
+    radii: [f64; 4],
+) {
+    const SHAPE_BOUNDING: std::os::raw::c_int = 0;
+    const SHAPE_SET: std::os::raw::c_int = 0;
+    const YX_BANDED: std::os::raw::c_int = 3;
+
+    let (mut event_base, mut error_base) = (0, 0);
+    if XShapeQueryExtension(display, &mut event_base, &mut error_base) == 0 {
+        return;
+    }
+    let mut rectangles: Vec<x11::xlib::XRectangle> = rounded_rect_bands(width, height, radii)
+        .into_iter()
+        .map(|(x, y, width, height)| x11::xlib::XRectangle {
+            x: x.clamp(0, i16::MAX as u32) as i16,
+            y: y.clamp(0, i16::MAX as u32) as i16,
+            width: width.min(u16::MAX as u32) as u16,
+            height: height.min(u16::MAX as u32) as u16,
+        })
+        .collect();
+    XShapeCombineRectangles(
+        display,
+        host,
+        SHAPE_BOUNDING,
+        0,
+        0,
+        rectangles.as_mut_ptr(),
+        rectangles.len() as std::os::raw::c_int,
+        SHAPE_SET,
+        YX_BANDED,
+    );
+}
+
+/// Splits a rounded rectangle into horizontal bands `(x, y, width, height)`,
+/// merging consecutive rows that share the same horizontal extent. Radii are
+/// top-left, top-right, bottom-right, bottom-left in physical pixels.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn rounded_rect_bands(width: u32, height: u32, radii: [f64; 4]) -> Vec<(u32, u32, u32, u32)> {
+    let limit = f64::from(width.min(height)) / 2.0;
+    let [top_left, top_right, bottom_right, bottom_left] = radii.map(|radius| {
+        if radius.is_finite() {
+            radius.clamp(0.0, limit)
+        } else {
+            0.0
+        }
+    });
+    // Horizontal inset of a quarter circle at a row whose pixel center lies
+    // `distance` pixels from the straight edge.
+    let inset = |radius: f64, distance: f64| -> u32 {
+        if distance >= radius {
+            return 0;
+        }
+        let dy = radius - distance;
+        (radius - (radius * radius - dy * dy).sqrt()).round() as u32
+    };
+
+    let mut bands: Vec<(u32, u32, u32, u32)> = Vec::new();
+    for row in 0..height {
+        let from_top = f64::from(row) + 0.5;
+        let from_bottom = f64::from(height - row) - 0.5;
+        let left = inset(top_left, from_top).max(inset(bottom_left, from_bottom));
+        let right = inset(top_right, from_top).max(inset(bottom_right, from_bottom));
+        if left + right >= width {
+            continue;
+        }
+        let span = (left, width - left - right);
+        match bands.last_mut() {
+            Some(band) if (band.0, band.2) == span && band.1 + band.3 == row => band.3 += 1,
+            _ => bands.push((span.0, row, span.1, 1)),
+        }
+    }
+    bands
+}
+
 fn is_supported_video_path(path: &std::path::Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
@@ -486,6 +588,9 @@ pub struct NativeVideoBounds {
     width: f64,
     height: f64,
     device_scale_factor: f64,
+    /// Top-left, top-right, bottom-right, bottom-left radii in CSS pixels.
+    #[serde(default)]
+    corner_radii: Option<[f64; 4]>,
 }
 
 #[tauri::command]
@@ -527,6 +632,11 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
                     unsafe {
                         if visible {
                             x11::xlib::XMoveResizeWindow(hosts.display, host, x, y, width, height);
+                            let radii = bounds
+                                .corner_radii
+                                .unwrap_or_default()
+                                .map(|radius| radius * bounds.device_scale_factor);
+                            shape_video_host(hosts.display, host, width, height, radii);
                             x11::xlib::XMapRaised(hosts.display, host);
                         } else {
                             x11::xlib::XUnmapWindow(hosts.display, host);
@@ -766,7 +876,32 @@ pub async fn save_playlist_session<R: tauri::Runtime>(
 mod tests {
     #[cfg(target_os = "linux")]
     use super::physical_video_bounds;
-    use super::{build_audio_filter, expand_drop_paths, with_level_meter};
+    use super::{build_audio_filter, expand_drop_paths, rounded_rect_bands, with_level_meter};
+
+    #[test]
+    fn square_corners_produce_one_band() {
+        assert_eq!(rounded_rect_bands(100, 50, [0.0; 4]), vec![(0, 0, 100, 50)]);
+    }
+
+    #[test]
+    fn rounded_corners_inset_only_the_corner_rows() {
+        let bands = rounded_rect_bands(100, 60, [10.0, 10.0, 4.0, 4.0]);
+        assert_eq!(bands.first().map(|band| band.1), Some(0));
+        assert!(bands[0].0 > 0 && bands[0].0 + bands[0].2 < 100);
+        assert!(bands
+            .iter()
+            .any(|&(x, y, width, height)| (x, width) == (0, 100) && y <= 10 && y + height >= 56));
+        assert_eq!(bands.last().map(|band| band.1 + band.3), Some(60));
+        let total_rows: u32 = bands.iter().map(|band| band.3).sum();
+        assert_eq!(total_rows, 60);
+    }
+
+    #[test]
+    fn oversized_or_invalid_radii_are_clamped() {
+        let bands = rounded_rect_bands(20, 20, [f64::NAN, 500.0, -3.0, 0.0]);
+        assert!(bands.iter().all(|&(x, _, width, _)| x + width <= 20));
+        assert_eq!(bands.iter().map(|band| band.3).sum::<u32>(), 20);
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

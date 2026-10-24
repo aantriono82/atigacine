@@ -81,7 +81,14 @@ export async function setPlaybackSpeed(speed: number): Promise<void> {
 }
 
 export async function syncMpvVideo(
-  bounds: { x: number; y: number; width: number; height: number },
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    /** Top-left, top-right, bottom-right, bottom-left radii in viewport CSS pixels. */
+    cornerRadii?: [number, number, number, number];
+  },
   visible: boolean,
 ): Promise<void> {
   const deviceScaleFactor = window.devicePixelRatio || 1;

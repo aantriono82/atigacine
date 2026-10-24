@@ -11,6 +11,23 @@ type NativeVideoSyncOptions = {
 const NATIVE_VIDEO_SYNC_INTERVAL_MS = 900;
 const NATIVE_VIDEO_RETRY_DELAYS_MS = [50, 200, 500];
 
+/**
+ * Radii that round the native video window's corners, so the CRT screen's
+ * curved rim stays visible on top of the rectangular X11 window. Computed
+ * styles are in untransformed CSS pixels, so scale them to the DOMRect.
+ */
+function viewportCornerRadii(viewport: HTMLElement, rect: DOMRect): [number, number, number, number] {
+  const style = getComputedStyle(viewport);
+  const scale = viewport.offsetWidth > 0 ? rect.width / viewport.offsetWidth : 1;
+  const radius = (value: string) => (Number.parseFloat(value) || 0) * scale;
+  return [
+    radius(style.borderTopLeftRadius),
+    radius(style.borderTopRightRadius),
+    radius(style.borderBottomRightRadius),
+    radius(style.borderBottomLeftRadius),
+  ];
+}
+
 /** Keeps the native mpv child window aligned with the TV screen viewport. */
 export function createNativeVideoSync(options: NativeVideoSyncOptions) {
   let syncFrame: number | undefined;
@@ -29,6 +46,7 @@ export function createNativeVideoSync(options: NativeVideoSyncOptions) {
       y: rect.top,
       width: rect.width,
       height: rect.height,
+      cornerRadii: viewportCornerRadii(viewport, rect),
     };
     void syncMpvVideo(bounds, options.hasMedia()).catch(() => undefined);
   }
