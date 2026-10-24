@@ -10,9 +10,9 @@
   import {
     command,
     destroy,
+    embeddedMpvOptions,
     init,
     listenEvents,
-    mpvOptions,
     observeProperties,
     setEqualizer,
     setPlaybackSpeed,
@@ -1356,7 +1356,7 @@
     const start = async () => {
       const sessionPromise = loadSession().catch(() => ({ playlists: [], activePlaylistId: null }));
       const nativeInitPromise = isTauriRuntime()
-        ? init({ initialOptions: mpvOptions, observedProperties: OBSERVED_PROPERTIES })
+        ? embeddedMpvOptions().then((initialOptions) => init({ initialOptions, observedProperties: OBSERVED_PROPERTIES }))
         : Promise.resolve();
       let nativeInitError: unknown;
       try {
