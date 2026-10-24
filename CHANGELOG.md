@@ -5,6 +5,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-24
+
 ### Fixed
 
 - Fullscreen and the mini player now work. The window capability was missing
@@ -12,6 +14,10 @@ All notable changes to Atiga Cine are documented here. Release sections use the
   and restore the main window, so both buttons did nothing.
 - The mini player's video no longer covers its title bar and controls, so the
   mini player can be closed to return to the main window.
+
+### Changed
+
+- Release builds use GitHub Actions versions that run on Node.js 24.
 
 ## [0.1.9] - 2026-10-24
 
@@ -53,7 +59,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 - Configured libmpv to preserve the video aspect ratio while fitting the native
   viewport with centered letterboxing.
 
-[Unreleased]: https://github.com/aantriono82/atigacine/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/aantriono82/atigacine/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.10
 [0.1.9]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.9
 [0.1.8]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.8
 [0.1.7]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.7
