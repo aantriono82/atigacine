@@ -5,6 +5,8 @@ use std::sync::{
 };
 
 #[cfg(target_os = "linux")]
+use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::ffi::CStr;
 #[cfg(target_os = "linux")]
 use std::os::raw::c_void;
@@ -377,6 +379,99 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
     .map_err(|error| format!("thumbnail task failed: {error}"))?
 }
 
+/// Native X11 windows that libmpv embeds into through `wid`, one per webview
+/// window. The display connection stays open for the lifetime of the app:
+/// X destroys a client's windows when its connection closes.
+#[cfg(target_os = "linux")]
+struct VideoHosts {
+    display: *mut x11::xlib::Display,
+    windows: HashMap<String, x11::xlib::Window>,
+}
+
+// The display pointer is only used while holding the VIDEO_HOSTS lock.
+#[cfg(target_os = "linux")]
+unsafe impl Send for VideoHosts {}
+
+#[cfg(target_os = "linux")]
+static VIDEO_HOSTS: Mutex<Option<VideoHosts>> = Mutex::new(None);
+
+#[cfg(target_os = "linux")]
+fn x11_window<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    window_label: &str,
+) -> Result<Option<x11::xlib::Window>, String> {
+    let window = app
+        .get_webview_window(window_label)
+        .ok_or_else(|| format!("window '{window_label}' not found"))?;
+    let handle = window
+        .window_handle()
+        .map_err(|error| format!("could not get native window handle: {error}"))?;
+    Ok(match handle.as_raw() {
+        RawWindowHandle::Xlib(handle) => Some(handle.window),
+        RawWindowHandle::Xcb(handle) => Some(handle.window.get() as x11::xlib::Window),
+        _ => None,
+    })
+}
+
+/// Creates the native window libmpv renders into. libmpv sizes its embedded
+/// video to the `wid` parent, so the TV viewport must be that parent: moving
+/// libmpv's own child window leaves its render size at the parent's size and
+/// crops the video. Returns `None` where X11 embedding is unavailable, in which
+/// case the plugin falls back to embedding into the webview window.
+#[tauri::command]
+pub fn create_mpv_video_host<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<Option<u64>, String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, window_label);
+        return Ok(None);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let Some(parent) = x11_window(&app, &window_label)? else {
+            return Ok(None);
+        };
+        let mut hosts = VIDEO_HOSTS
+            .lock()
+            .map_err(|_| "video host lock was poisoned".to_string())?;
+        if hosts.is_none() {
+            let display = unsafe { x11::xlib::XOpenDisplay(ptr::null()) };
+            if display.is_null() {
+                return Ok(None);
+            }
+            *hosts = Some(VideoHosts {
+                display,
+                windows: HashMap::new(),
+            });
+        }
+        let Some(hosts) = hosts.as_mut() else {
+            return Ok(None);
+        };
+        if let Some(&host) = hosts.windows.get(&window_label) {
+            return Ok(Some(host));
+        }
+
+        unsafe {
+            let display = hosts.display;
+            let black = x11::xlib::XBlackPixel(display, x11::xlib::XDefaultScreen(display));
+            // Start mapped but outside the parent so libmpv sees a viewable
+            // window; sync_mpv_video moves it into the TV viewport.
+            let host =
+                x11::xlib::XCreateSimpleWindow(display, parent, -1, -1, 1, 1, 0, black, black);
+            if host == 0 {
+                return Err("could not create native video host window".into());
+            }
+            x11::xlib::XMapWindow(display, host);
+            x11::xlib::XFlush(display);
+            hosts.windows.insert(window_label, host);
+            Ok(Some(host))
+        }
+    }
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeVideoBounds {
@@ -402,9 +497,6 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
 
     #[cfg(target_os = "linux")]
     {
-        let window = app
-            .get_webview_window(&window_label)
-            .ok_or_else(|| format!("window '{window_label}' not found"))?;
         let (mut x, mut y, width, height) = physical_video_bounds(
             bounds.x,
             bounds.y,
@@ -412,14 +504,28 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
             bounds.height,
             bounds.device_scale_factor,
         )?;
-        let handle = window
-            .window_handle()
-            .map_err(|error| format!("could not get native window handle: {error}"))?;
-        let parent = match handle.as_raw() {
-            RawWindowHandle::Xlib(handle) => handle.window,
-            RawWindowHandle::Xcb(handle) => handle.window.get() as x11::xlib::Window,
-            RawWindowHandle::Wayland(_) => return Ok(()),
-            _ => return Ok(()),
+
+        // The host is a direct child of the webview window, so viewport
+        // coordinates need no translation. Resizing it makes libmpv follow.
+        if let Ok(hosts) = VIDEO_HOSTS.lock() {
+            if let Some(hosts) = hosts.as_ref() {
+                if let Some(&host) = hosts.windows.get(&window_label) {
+                    unsafe {
+                        if visible {
+                            x11::xlib::XMoveResizeWindow(hosts.display, host, x, y, width, height);
+                            x11::xlib::XMapRaised(hosts.display, host);
+                        } else {
+                            x11::xlib::XUnmapWindow(hosts.display, host);
+                        }
+                        x11::xlib::XFlush(hosts.display);
+                    }
+                    return Ok(());
+                }
+            }
+        }
+
+        let Some(parent) = x11_window(&app, &window_label)? else {
+            return Ok(());
         };
 
         let display = unsafe { x11::xlib::XOpenDisplay(ptr::null()) };

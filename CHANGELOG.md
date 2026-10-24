@@ -5,6 +5,13 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+### Fixed
+
+- Native video on Linux/X11 is no longer cropped with black bands on the left
+  and bottom of the TV screen. libmpv now embeds into a dedicated native window
+  that follows the TV viewport, so it renders at the viewport size instead of
+  the full application window size.
+
 ## [0.1.8] - 2026-09-30
 
 ### Fixed

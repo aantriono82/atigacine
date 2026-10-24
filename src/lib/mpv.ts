@@ -49,6 +49,23 @@ export const mpvOptions = {
 
 export { command, destroy, init, listenEvents, observeProperties, setProperty };
 
+/**
+ * libmpv options for the main window. On X11, libmpv embeds into a native host
+ * window that follows the TV viewport (see `syncMpvVideo`); elsewhere the
+ * plugin embeds into the webview window itself.
+ */
+export async function embeddedMpvOptions(): Promise<Record<string, string | number>> {
+  try {
+    const wid = await invoke<number | null>("create_mpv_video_host", {
+      windowLabel: getCurrentWindow().label,
+    });
+    if (wid !== null) return { ...mpvOptions, wid };
+  } catch {
+    // Fall back to the plugin's own embedding.
+  }
+  return { ...mpvOptions };
+}
+
 export async function setEqualizer(enabled: boolean, gains: readonly number[], normalize: boolean): Promise<void> {
   await invoke("set_equalizer", {
     equalizer: { enabled, gains: [...gains], normalize },
