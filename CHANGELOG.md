@@ -5,6 +5,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-10-24
+
 ### Fixed
 
 - The equalizer preset name is readable again. WebKitGTK drew the preset field
