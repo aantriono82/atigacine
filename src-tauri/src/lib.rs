@@ -19,6 +19,7 @@ pub fn run() {
             commands::set_playback_speed,
             commands::cancel_thumbnail_capture,
             commands::capture_thumbnail,
+            commands::release_thumbnail_source,
             commands::create_mpv_video_host,
             commands::sync_mpv_video
         ])

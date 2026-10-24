@@ -126,6 +126,7 @@
   const thumbnails = createThumbnailPreview({
     isEnabled: () => !browserMode && initialized,
     getDuration: () => get(playerStore).duration,
+    getMediaKey: () => get(playerStore).currentFile,
     onChange: (preview) => {
       thumbnailPreview = preview;
     },

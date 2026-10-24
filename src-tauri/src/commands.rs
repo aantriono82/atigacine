@@ -15,7 +15,7 @@ use std::ptr;
 
 #[cfg(target_os = "linux")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Listener, Manager};
 use tauri_plugin_libmpv::MpvExt;
 
 use crate::audio_levels::{self, AudioLevelState};
@@ -24,6 +24,8 @@ use crate::playlist::{sanitize_session, PlaylistItem, PlaylistSession};
 pub struct ThumbnailCaptureState {
     generation: Arc<AtomicU64>,
     capture_lock: Arc<Mutex<()>>,
+    /// Window label -> media path loaded in that window's thumbnail decoder.
+    sources: Arc<Mutex<std::collections::HashMap<String, String>>>,
 }
 
 impl Default for ThumbnailCaptureState {
@@ -31,6 +33,7 @@ impl Default for ThumbnailCaptureState {
         Self {
             generation: Arc::new(AtomicU64::new(0)),
             capture_lock: Arc::new(Mutex::new(())),
+            sources: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 }
@@ -367,13 +370,87 @@ pub async fn set_playback_speed<R: tauri::Runtime>(
     .map_err(|error| format!("playback speed command failed: {error}"))?
 }
 
+/// Seek-bar thumbnails come from a hidden libmpv instance per window, so
+/// hovering never pauses or seeks the main player. It decodes in software and
+/// scales frames down before they are encoded, which keeps each capture small.
+const THUMBNAIL_INSTANCE_SUFFIX: &str = "-thumbnails";
+const THUMBNAIL_OPTIONS: [(&str, &str); 14] = [
+    ("vo", "null"),
+    ("ao", "null"),
+    ("aid", "no"),
+    ("sid", "no"),
+    ("pause", "yes"),
+    ("idle", "yes"),
+    ("keep-open", "always"),
+    ("hwdec", "no"),
+    // One decoding thread and a small demuxer buffer keep the decoder light;
+    // it only ever decodes the keyframe it seeks to.
+    ("vd-lavc-threads", "1"),
+    ("cache", "no"),
+    ("demuxer-max-bytes", "4MiB"),
+    ("vf", "scale=w=320:h=-2"),
+    // The format is picked from the file extension; JPEG encodes far faster than PNG.
+    ("screenshot-jpeg-quality", "75"),
+    ("config", "no"),
+];
+const THUMBNAIL_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn thumbnail_label(window_label: &str) -> String {
+    format!("{window_label}{THUMBNAIL_INSTANCE_SUFFIX}")
+}
+
+/// Runs `action`, then waits until the thumbnail instance reports
+/// `playback-restart`, which mpv emits once a load or seek shows its frame.
+fn run_and_wait_for_frame<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    is_current: &dyn Fn() -> bool,
+    action: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let listener = app.listen_any(format!("mpv-event-{label}"), move |event| {
+        let Ok(payload) = serde_json::from_str::<serde_json::Value>(event.payload()) else {
+            return;
+        };
+        match payload.get("event").and_then(serde_json::Value::as_str) {
+            Some("playback-restart") => {
+                let _ = sender.send(Ok(()));
+            }
+            Some("end-file")
+                if payload.get("reason").and_then(serde_json::Value::as_str) == Some("error") =>
+            {
+                let _ = sender.send(Err("thumbnail source could not be opened".to_string()));
+            }
+            _ => {}
+        }
+    });
+
+    let result = (|| {
+        action()?;
+        let deadline = std::time::Instant::now() + THUMBNAIL_WAIT_TIMEOUT;
+        loop {
+            if !is_current() {
+                return Err("thumbnail capture cancelled".to_string());
+            }
+            match receiver.recv_timeout(std::time::Duration::from_millis(20)) {
+                Ok(result) => return result,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                    if std::time::Instant::now() < deadline => {}
+                Err(_) => return Err("thumbnail frame did not arrive in time".to_string()),
+            }
+        }
+    })();
+    app.unlisten(listener);
+    result
+}
+
 #[tauri::command]
 pub async fn capture_thumbnail<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, ThumbnailCaptureState>,
     position: f64,
     window_label: String,
-) -> Result<Vec<u8>, String> {
+) -> Result<tauri::ipc::Response, String> {
     if !position.is_finite() || position < 0.0 {
         return Err("thumbnail position must be a non-negative number".into());
     }
@@ -381,6 +458,7 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     let generations = Arc::clone(&state.generation);
     let capture_lock = Arc::clone(&state.capture_lock);
+    let sources = Arc::clone(&state.sources);
 
     tauri::async_runtime::spawn_blocking(move || {
         let _capture_guard = capture_lock
@@ -391,95 +469,129 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
             return Err("thumbnail capture cancelled".to_string());
         }
 
+        let mpv = app.mpv();
+        let media_path = mpv
+            .get_property("path".into(), "string".into(), &window_label)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .ok_or_else(|| "no media is loaded".to_string())?;
+        let label = thumbnail_label(&window_label);
+
+        let loaded_path = sources
+            .lock()
+            .map_err(|_| "thumbnail sources lock was poisoned".to_string())?
+            .get(&window_label)
+            .cloned();
+        if loaded_path.as_deref() != Some(media_path.as_str()) {
+            if loaded_path.is_none() {
+                let config = tauri_plugin_libmpv::MpvConfig {
+                    initial_options: THUMBNAIL_OPTIONS
+                        .iter()
+                        .map(|(key, value)| (key.to_string(), serde_json::Value::from(*value)))
+                        .collect(),
+                    observed_properties: Default::default(),
+                };
+                mpv.init(config, &label)
+                    .map_err(|error| format!("could not start thumbnail decoder: {error}"))?;
+            }
+            // Forget the source first, so a failed load is retried next time.
+            if let Ok(mut sources) = sources.lock() {
+                sources.remove(&window_label);
+            }
+            run_and_wait_for_frame(&app, &label, &is_current, || {
+                mpv.command(
+                    "loadfile",
+                    &vec![serde_json::Value::String(media_path.clone())],
+                    &label,
+                )
+                .map_err(|error| format!("could not open thumbnail source: {error}"))
+            })?;
+            if let Ok(mut sources) = sources.lock() {
+                sources.insert(window_label.clone(), media_path);
+            }
+        }
+
+        // The nearest keyframe is close enough for a preview and needs no
+        // decoding of the frames in between.
+        run_and_wait_for_frame(&app, &label, &is_current, || {
+            mpv.command(
+                "seek",
+                &vec![
+                    serde_json::Value::from(position),
+                    "absolute+keyframes".into(),
+                ],
+                &label,
+            )
+            .map_err(|error| format!("could not seek for thumbnail: {error}"))
+        })?;
+
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or_default();
         let path = std::env::temp_dir().join(format!(
-            "atiga-cine-thumbnail-{}-{stamp}.png",
+            "atiga-cine-thumbnail-{}-{stamp}.jpg",
             std::process::id()
         ));
-        let mpv = app.mpv();
-        let original_position = mpv
-            .get_property("time-pos".into(), "double".into(), &window_label)
-            .ok()
-            .and_then(|value| value.as_f64())
-            .unwrap_or(position);
-        let original_pause = mpv
-            .get_property("pause".into(), "flag".into(), &window_label)
-            .ok()
-            .and_then(|value| value.as_bool())
-            .unwrap_or(false);
-
-        let result = (|| {
-            if !is_current() {
-                return Err("thumbnail capture cancelled".to_string());
-            }
-            mpv.set_property("pause", &serde_json::Value::Bool(true), &window_label)
-                .map_err(|error| format!("could not pause for thumbnail: {error}"))?;
-            if !is_current() {
-                return Err("thumbnail capture cancelled".to_string());
-            }
-            mpv.set_property(
-                "time-pos",
-                &serde_json::Value::from(position),
-                &window_label,
-            )
-            .map_err(|error| format!("could not seek for thumbnail: {error}"))?;
-            mpv.command(
+        let captured = mpv
+            .command(
                 "screenshot-to-file",
                 &vec![
                     serde_json::Value::String(path.to_string_lossy().into_owned()),
-                    serde_json::Value::String("video".into()),
+                    "video".into(),
                 ],
-                &window_label,
+                &label,
             )
-            .map_err(|error| format!("could not capture thumbnail: {error}"))?;
-
-            for _ in 0..10 {
-                if !is_current() {
-                    return Err("thumbnail capture cancelled".to_string());
-                }
-                if let Ok(bytes) = std::fs::read(&path) {
-                    if !bytes.is_empty() {
-                        if !is_current() {
-                            return Err("thumbnail capture cancelled".to_string());
-                        }
-                        return Ok(bytes);
-                    }
-                }
-                std::thread::sleep(std::time::Duration::from_millis(15));
-            }
-
-            Err("libmpv did not produce a thumbnail".into())
-        })();
-
-        let restore_position = mpv.set_property(
-            "time-pos",
-            &serde_json::Value::from(original_position),
-            &window_label,
-        );
-        let restore_pause = mpv.set_property(
-            "pause",
-            &serde_json::Value::Bool(original_pause),
-            &window_label,
-        );
+            .map_err(|error| format!("could not capture thumbnail: {error}"))
+            .and_then(|()| {
+                std::fs::read(&path).map_err(|error| format!("could not read thumbnail: {error}"))
+            });
         let _ = std::fs::remove_file(&path);
 
-        if let Err(error) = restore_position {
-            return Err(format!(
-                "thumbnail captured but position restore failed: {error}"
-            ));
+        let bytes = captured?;
+        if bytes.is_empty() {
+            return Err("libmpv did not produce a thumbnail".into());
         }
-        if let Err(error) = restore_pause {
-            return Err(format!(
-                "thumbnail captured but playback restore failed: {error}"
-            ));
+        if !is_current() {
+            return Err("thumbnail capture cancelled".to_string());
         }
-        result
+        Ok(bytes)
     })
     .await
     .map_err(|error| format!("thumbnail task failed: {error}"))?
+    // Raw bytes reach the webview as an ArrayBuffer instead of a JSON number array.
+    .map(tauri::ipc::Response::new)
+}
+
+/// Stops the window's thumbnail decoder; the next capture starts a new one.
+#[tauri::command]
+pub async fn release_thumbnail_source<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: tauri::State<'_, ThumbnailCaptureState>,
+    window_label: String,
+) -> Result<(), String> {
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    let capture_lock = Arc::clone(&state.capture_lock);
+    let sources = Arc::clone(&state.sources);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let _capture_guard = capture_lock
+            .lock()
+            .map_err(|_| "thumbnail capture lock was poisoned".to_string())?;
+        let started = sources
+            .lock()
+            .map_err(|_| "thumbnail sources lock was poisoned".to_string())?
+            .remove(&window_label)
+            .is_some();
+        if started {
+            app.mpv()
+                .destroy(&thumbnail_label(&window_label))
+                .map_err(|error| format!("could not stop thumbnail decoder: {error}"))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("thumbnail release failed: {error}"))?
 }
 
 /// Native X11 windows that libmpv embeds into through `wid`, one per webview
