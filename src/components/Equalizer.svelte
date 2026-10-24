@@ -223,12 +223,32 @@
     accent-color: var(--skin-accent);
   }
 
+  /* WebKitGTK paints native selects with the GTK theme (white field), which
+     hides the skin text color; draw the field and arrow ourselves. */
   .preset-control select {
-    padding: 0.2rem 0.25rem;
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0.2rem 1.1rem 0.2rem 0.3rem;
+    color: var(--skin-text);
+    background-color: var(--skin-surface-raised);
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--skin-text) 50%),
+      linear-gradient(135deg, var(--skin-text) 50%, transparent 50%);
+    background-position:
+      right 0.55rem center,
+      right 0.3rem center;
+    background-size: 0.25rem 0.25rem;
+    background-repeat: no-repeat;
+    border: 1px solid var(--skin-border);
+    border-radius: 2px;
+    font: 0.6rem/1 monospace;
+  }
+
+  /* Only browsers honor this; WebKitGTK draws the open list as a native GTK
+     menu that follows the system theme. */
+  .preset-control select option {
     color: var(--skin-text);
     background: var(--skin-surface-raised);
-    border: 1px solid var(--skin-border);
-    font: 0.6rem/1 monospace;
   }
 
   .bands {
