@@ -5,6 +5,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-10-24
+
 ### Changed
 
 - The equalizer visualizer and the speaker grille lights now follow the real
@@ -12,6 +14,10 @@ All notable changes to Atiga Cine are documented here. Release sections use the
   levels ten times a second; the bars show a stereo level history (left channel
   on the left, right on the right, newest at the center) instead of a
   procedural animation.
+- During playback the TV screen keeps its rounded black rim and glass edge.
+  The native video window is clipped to the screen's curved corners with the
+  X11 Shape extension and inset inside the glass ring, instead of covering the
+  whole screen as a sharp rectangle.
 
 ## [0.1.10] - 2026-10-24
 
@@ -67,7 +73,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 - Configured libmpv to preserve the video aspect ratio while fitting the native
   viewport with centered letterboxing.
 
-[Unreleased]: https://github.com/aantriono82/atigacine/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/aantriono82/atigacine/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.11
 [0.1.10]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.10
 [0.1.9]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.9
 [0.1.8]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.8
