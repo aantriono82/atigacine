@@ -38,7 +38,7 @@ Atiga Cine is a Linux desktop media player built with Tauri, Rust, Svelte, and l
 - Retro TV skin with optional CRT scanline and vignette effects.
 - Supported video extensions include `.3gp`, `.avi`, `.flac`, `.m4v`, `.mkv`, `.mov`, `.mp4`, `.mpeg`, `.mpg`, `.ogg`, `.ogv`, `.ts`, `.webm`, and `.wmv`.
 
-The equalizer bars are currently a procedural visualizer. They are UI feedback and do not represent measured real-time audio levels. Thumbnail previews, mini-player behavior, and performance on low-spec hardware should be treated as Beta until tested on the target machines.
+The equalizer bars show the measured left and right audio levels over the last moment of playback. They are a level meter, not a frequency spectrum. Thumbnail previews, mini-player behavior, and performance on low-spec hardware should be treated as Beta until tested on the target machines.
 
 ## System requirements
 

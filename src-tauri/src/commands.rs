@@ -18,6 +18,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_libmpv::MpvExt;
 
+use crate::audio_levels::{self, AudioLevelState};
 use crate::playlist::{sanitize_session, PlaylistItem, PlaylistSession};
 
 pub struct ThumbnailCaptureState {
@@ -643,21 +644,53 @@ fn build_audio_filter(
     Ok(format!("lavfi=[{}]", chain.join(",")))
 }
 
+/// Appends the level meter after the equalizer, so the visualizer shows what is heard.
+fn with_level_meter(filter: &str, meter: &str) -> String {
+    if filter.is_empty() {
+        meter.to_string()
+    } else {
+        format!("{filter},{meter}")
+    }
+}
+
 #[tauri::command]
 pub async fn set_equalizer<R: tauri::Runtime>(
     app: AppHandle<R>,
+    levels: tauri::State<'_, AudioLevelState>,
     equalizer: EqualizerRequest,
     window_label: String,
 ) -> Result<(), String> {
     let filter = build_audio_filter(equalizer.enabled, &equalizer.gains, equalizer.normalize)?;
+    let meters = levels
+        .meter_path(&window_label)
+        .map(|path| audio_levels::meter_filters(&path))
+        .unwrap_or_default();
 
     tauri::async_runtime::spawn_blocking(move || {
-        app.mpv()
-            .set_property("af", &serde_json::Value::String(filter), &window_label)
+        let mpv = app.mpv();
+        // The level meter only feeds the visualizer; if this FFmpeg rejects it,
+        // keep the equalizer working without it.
+        for meter in meters {
+            let metered = serde_json::Value::String(with_level_meter(&filter, &meter));
+            if mpv.set_property("af", &metered, &window_label).is_ok() {
+                return Ok(());
+            }
+        }
+        mpv.set_property("af", &serde_json::Value::String(filter), &window_label)
             .map_err(|error| format!("libmpv rejected equalizer filter: {error}"))
     })
     .await
     .map_err(|error| format!("equalizer command failed: {error}"))?
+}
+
+/// Latest per-channel RMS levels in dBFS, or an empty list while no audio is
+/// flowing through the level meter.
+#[tauri::command]
+pub fn get_audio_levels(
+    levels: tauri::State<'_, AudioLevelState>,
+    window_label: String,
+) -> Vec<f64> {
+    levels.levels(&window_label)
 }
 
 fn session_path<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -733,7 +766,7 @@ pub async fn save_playlist_session<R: tauri::Runtime>(
 mod tests {
     #[cfg(target_os = "linux")]
     use super::physical_video_bounds;
-    use super::{build_audio_filter, expand_drop_paths};
+    use super::{build_audio_filter, expand_drop_paths, with_level_meter};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -781,6 +814,15 @@ mod tests {
             filter,
             "lavfi=[equalizer=f=60:width_type=o:w=1:g=7.0,equalizer=f=250:width_type=o:w=1:g=5.0,equalizer=f=1000:width_type=o:w=1:g=2.0,equalizer=f=4000:width_type=o:w=1:g=0.0,equalizer=f=12000:width_type=o:w=1:g=-3.5]"
         );
+    }
+
+    #[test]
+    fn appends_level_meter_after_equalizer() {
+        assert_eq!(
+            with_level_meter("lavfi=[dynaudnorm]", "lavfi=[astats]"),
+            "lavfi=[dynaudnorm],lavfi=[astats]"
+        );
+        assert_eq!(with_level_meter("", "lavfi=[astats]"), "lavfi=[astats]");
     }
 
     #[test]

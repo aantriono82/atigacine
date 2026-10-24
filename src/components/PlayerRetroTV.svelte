@@ -3,6 +3,7 @@
   import { onMount, tick } from "svelte";
   import { fly } from "svelte/transition";
   import Equalizer from "./Equalizer.svelte";
+  import { audioLevels } from "../lib/audioLevels";
   import Playlist from "./Playlist.svelte";
   import Toolbar from "./Toolbar.svelte";
   import TvDial from "./TvDial.svelte";
@@ -113,7 +114,8 @@
   let speakerVisualizerTimer: number | undefined;
   let mounted = false;
   const speakerHoles = Array.from({ length: 40 }, (_, index) => index);
-  const speakerLitCount = Math.round(speakerHoles.length * 0.25);
+  // At full level half of the holes light up; quiet passages light only a few.
+  const speakerMaxLitCount = Math.round(speakerHoles.length * 0.5);
   let speakerLit = speakerHoles.map(() => false);
 
   function updateSpeakerVisualizer(): void {
@@ -130,8 +132,9 @@
       shuffledHoles[swapIndex] = currentHole;
     }
 
-    // TODO: Replace this random placeholder with real audio levels from libmpv.
-    const litHoles = new Set(shuffledHoles.slice(0, speakerLitCount));
+    // How many holes light follows the measured level; which ones is decorative.
+    const level = Math.max($audioLevels.left, $audioLevels.right);
+    const litHoles = new Set(shuffledHoles.slice(0, Math.round(speakerMaxLitCount * level)));
     speakerLit = speakerHoles.map((index) => {
       return litHoles.has(index);
     });

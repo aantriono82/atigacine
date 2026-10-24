@@ -5,6 +5,14 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+### Changed
+
+- The equalizer visualizer and the speaker grille lights now follow the real
+  audio level. An `astats` meter after the equalizer measures per-channel RMS
+  levels ten times a second; the bars show a stereo level history (left channel
+  on the left, right on the right, newest at the center) instead of a
+  procedural animation.
+
 ## [0.1.10] - 2026-10-24
 
 ### Fixed
