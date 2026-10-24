@@ -5,13 +5,14 @@
   import {
     command,
     destroy,
+    embeddedMpvOptions,
     init,
     listenEvents,
-    mpvOptions,
     observeProperties,
     setEqualizer,
     setPlaybackSpeed,
     setProperty,
+    syncMpvVideo,
     OBSERVED_PROPERTIES,
   } from "../lib/mpv";
   import { formatTime } from "../lib/time";
@@ -34,6 +35,20 @@
   let unobserve: (() => void) | undefined;
   let unlistenEvents: (() => void) | undefined;
   let closeUnlisten: (() => void) | undefined;
+  let videoViewport: HTMLElement | undefined;
+  let syncFrame: number | undefined;
+
+  // The native video is an X11 window above the webview, so it gets its own
+  // area between the bars instead of filling the whole mini window.
+  function syncVideo(): void {
+    if (closing || !videoViewport || syncFrame !== undefined) return;
+    syncFrame = window.requestAnimationFrame(() => {
+      syncFrame = undefined;
+      if (closing || !videoViewport) return;
+      const rect = videoViewport.getBoundingClientRect();
+      void syncMpvVideo({ x: rect.left, y: rect.top, width: rect.width, height: rect.height }, true).catch(() => undefined);
+    });
+  }
 
   async function togglePlayback(): Promise<void> {
     paused = !paused;
@@ -62,8 +77,10 @@
       if (!file) return;
 
       try {
-        await init({ initialOptions: mpvOptions, observedProperties: OBSERVED_PROPERTIES }, LABEL);
+        const initialOptions = await embeddedMpvOptions();
+        await init({ initialOptions, observedProperties: OBSERVED_PROPERTIES }, LABEL);
         if (!active) return;
+        syncVideo();
 
         await setProperty("volume", initialVolume, LABEL);
         await setProperty("mute", initialMuted, LABEL);
@@ -86,6 +103,8 @@
       }
     };
 
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncVideo) : undefined;
+    if (videoViewport) resizeObserver?.observe(videoViewport);
     void start().catch(() => undefined);
     void getCurrentWindow().onCloseRequested((event) => {
       if (closing) return;
@@ -98,6 +117,8 @@
 
     return () => {
       active = false;
+      resizeObserver?.disconnect();
+      if (syncFrame !== undefined) window.cancelAnimationFrame(syncFrame);
       unobserve?.();
       unlistenEvents?.();
       closeUnlisten?.();
@@ -113,6 +134,7 @@
     <span data-tauri-drag-region>ATIGA CINE · MINI</span>
     <button type="button" aria-label="Close mini player" title="Return to main window" onclick={closeMini}>×</button>
   </div>
+  <div bind:this={videoViewport} class="mini-video" aria-hidden="true"></div>
   <div class="mini-controls">
     <button class="mini-play" type="button" aria-label={paused ? "Play" : "Pause"} onclick={() => void togglePlayback()}>{paused ? "▶" : "Ⅱ"}</button>
     <span>{formatTime(position)} / {formatTime(duration)}</span>
@@ -132,6 +154,8 @@
 
   .mini-player {
     position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     width: 100vw;
     height: 100vh;
     overflow: hidden;
@@ -144,25 +168,19 @@
 
   .mini-dragbar,
   .mini-controls {
-    position: absolute;
-    z-index: 2;
-    left: 0;
-    right: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0.35rem 0.45rem;
     background: linear-gradient(180deg, rgb(12 13 12 / 92%), rgb(12 13 12 / 65%));
-    opacity: 0;
-    transition: opacity 140ms ease;
   }
 
-  .mini-dragbar { top: 0; }
-  .mini-controls { bottom: 0; justify-content: flex-start; gap: 0.45rem; }
-  .mini-player:hover .mini-dragbar,
-  .mini-player:hover .mini-controls,
-  .mini-dragbar:focus-within,
-  .mini-controls:focus-within { opacity: 1; }
+  .mini-video {
+    min-height: 0;
+    background: #000;
+  }
+
+  .mini-controls { justify-content: flex-start; gap: 0.45rem; }
 
   .mini-dragbar button,
   .mini-play {

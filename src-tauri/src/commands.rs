@@ -385,7 +385,10 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
 #[cfg(target_os = "linux")]
 struct VideoHosts {
     display: *mut x11::xlib::Display,
-    windows: HashMap<String, x11::xlib::Window>,
+    /// Window label -> (webview X window, host window). A host is destroyed
+    /// with its parent, and windows such as the mini player get a new X
+    /// window each time they open, so a host is only reused for its parent.
+    windows: HashMap<String, (x11::xlib::Window, x11::xlib::Window)>,
 }
 
 // The display pointer is only used while holding the VIDEO_HOSTS lock.
@@ -450,8 +453,10 @@ pub fn create_mpv_video_host<R: tauri::Runtime>(
         let Some(hosts) = hosts.as_mut() else {
             return Ok(None);
         };
-        if let Some(&host) = hosts.windows.get(&window_label) {
-            return Ok(Some(host));
+        if let Some(&(host_parent, host)) = hosts.windows.get(&window_label) {
+            if host_parent == parent {
+                return Ok(Some(host));
+            }
         }
 
         unsafe {
@@ -466,7 +471,7 @@ pub fn create_mpv_video_host<R: tauri::Runtime>(
             }
             x11::xlib::XMapWindow(display, host);
             x11::xlib::XFlush(display);
-            hosts.windows.insert(window_label, host);
+            hosts.windows.insert(window_label, (parent, host));
             Ok(Some(host))
         }
     }
@@ -505,11 +510,19 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
             bounds.device_scale_factor,
         )?;
 
+        let Some(parent) = x11_window(&app, &window_label)? else {
+            return Ok(());
+        };
+
         // The host is a direct child of the webview window, so viewport
         // coordinates need no translation. Resizing it makes libmpv follow.
         if let Ok(hosts) = VIDEO_HOSTS.lock() {
             if let Some(hosts) = hosts.as_ref() {
-                if let Some(&host) = hosts.windows.get(&window_label) {
+                if let Some(&(_, host)) = hosts
+                    .windows
+                    .get(&window_label)
+                    .filter(|(host_parent, _)| *host_parent == parent)
+                {
                     unsafe {
                         if visible {
                             x11::xlib::XMoveResizeWindow(hosts.display, host, x, y, width, height);
@@ -523,10 +536,6 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
                 }
             }
         }
-
-        let Some(parent) = x11_window(&app, &window_label)? else {
-            return Ok(());
-        };
 
         let display = unsafe { x11::xlib::XOpenDisplay(ptr::null()) };
         if display.is_null() {

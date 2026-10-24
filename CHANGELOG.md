@@ -5,6 +5,14 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+### Fixed
+
+- Fullscreen and the mini player now work. The window capability was missing
+  the permissions to toggle fullscreen, open the mini player window, and hide
+  and restore the main window, so both buttons did nothing.
+- The mini player's video no longer covers its title bar and controls, so the
+  mini player can be closed to return to the main window.
+
 ## [0.1.9] - 2026-10-24
 
 ### Fixed
