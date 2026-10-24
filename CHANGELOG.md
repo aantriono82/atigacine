@@ -5,6 +5,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-10-24
+
 ### Fixed
 
 - Native video on Linux/X11 is no longer cropped with black bands on the left
@@ -43,7 +45,8 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 - Configured libmpv to preserve the video aspect ratio while fitting the native
   viewport with centered letterboxing.
 
-[Unreleased]: https://github.com/aantriono82/atigacine/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/aantriono82/atigacine/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.9
 [0.1.8]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.8
 [0.1.7]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.7
 [0.1.6]: https://github.com/aantriono82/atigacine/releases/tag/v0.1.6
