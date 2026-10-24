@@ -5,6 +5,23 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+### Fixed
+
+- The equalizer preset name is readable again. WebKitGTK drew the preset field
+  as a white GTK-themed box with the skin's light text; the field and its arrow
+  are now drawn by the skin.
+- Seek-bar thumbnails show the hovered position instead of the current frame,
+  and hovering no longer pauses or seeks the video. Thumbnails come from a
+  hidden decoder that seeks to the nearest keyframe, so a preview can be
+  slightly before the hovered position. The decoder stops 10 seconds after the
+  pointer leaves the seek bar.
+
+### Changed
+
+- Playback uses far less CPU: WebKit's share dropped from about 147% to 58% on
+  an i7-7600U. The clock, seek bar, speaker grille and equalizer bars now
+  update together five times a second, without fades or height animations.
+
 ## [0.1.11] - 2026-10-24
 
 ### Changed
