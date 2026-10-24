@@ -24,8 +24,9 @@ use crate::playlist::{sanitize_session, PlaylistItem, PlaylistSession};
 pub struct ThumbnailCaptureState {
     generation: Arc<AtomicU64>,
     capture_lock: Arc<Mutex<()>>,
-    /// Window label -> media path loaded in that window's thumbnail decoder.
-    sources: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    /// Window label -> that window's running thumbnail decoder, with the media
+    /// path it has loaded (`None` until a load succeeds).
+    sources: Arc<Mutex<std::collections::HashMap<String, Option<String>>>>,
 }
 
 impl Default for ThumbnailCaptureState {
@@ -374,7 +375,7 @@ pub async fn set_playback_speed<R: tauri::Runtime>(
 /// hovering never pauses or seeks the main player. It decodes in software and
 /// scales frames down before they are encoded, which keeps each capture small.
 const THUMBNAIL_INSTANCE_SUFFIX: &str = "-thumbnails";
-const THUMBNAIL_OPTIONS: [(&str, &str); 14] = [
+const THUMBNAIL_OPTIONS: [(&str, &str); 18] = [
     ("vo", "null"),
     ("ao", "null"),
     ("aid", "no"),
@@ -386,9 +387,15 @@ const THUMBNAIL_OPTIONS: [(&str, &str); 14] = [
     // One decoding thread and a small demuxer buffer keep the decoder light;
     // it only ever decodes the keyframe it seeks to.
     ("vd-lavc-threads", "1"),
+    // A preview tolerates lower decode quality; skipping the loop filter and
+    // allowing non-spec shortcuts make a software keyframe decode much cheaper.
+    ("vd-lavc-skiploopfilter", "all"),
+    ("vd-lavc-fast", "yes"),
+    ("hr-seek", "no"),
     ("cache", "no"),
     ("demuxer-max-bytes", "4MiB"),
-    ("vf", "scale=w=320:h=-2"),
+    ("demuxer-readahead-secs", "0"),
+    ("vf", "scale=w=320:h=-2:flags=fast_bilinear"),
     // The format is picked from the file extension; JPEG encodes far faster than PNG.
     ("screenshot-jpeg-quality", "75"),
     ("config", "no"),
@@ -477,13 +484,13 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
             .ok_or_else(|| "no media is loaded".to_string())?;
         let label = thumbnail_label(&window_label);
 
-        let loaded_path = sources
+        let decoder = sources
             .lock()
             .map_err(|_| "thumbnail sources lock was poisoned".to_string())?
             .get(&window_label)
             .cloned();
-        if loaded_path.as_deref() != Some(media_path.as_str()) {
-            if loaded_path.is_none() {
+        if decoder.as_ref().and_then(Option::as_deref) != Some(media_path.as_str()) {
+            if decoder.is_none() {
                 let config = tauri_plugin_libmpv::MpvConfig {
                     initial_options: THUMBNAIL_OPTIONS
                         .iter()
@@ -494,9 +501,10 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
                 mpv.init(config, &label)
                     .map_err(|error| format!("could not start thumbnail decoder: {error}"))?;
             }
-            // Forget the source first, so a failed load is retried next time.
+            // Record the decoder before loading, so a failed load is retried
+            // next time and a release still stops the decoder.
             if let Ok(mut sources) = sources.lock() {
-                sources.remove(&window_label);
+                sources.insert(window_label.clone(), None);
             }
             run_and_wait_for_frame(&app, &label, &is_current, || {
                 mpv.command(
@@ -507,7 +515,7 @@ pub async fn capture_thumbnail<R: tauri::Runtime>(
                 .map_err(|error| format!("could not open thumbnail source: {error}"))
             })?;
             if let Ok(mut sources) = sources.lock() {
-                sources.insert(window_label.clone(), media_path);
+                sources.insert(window_label.clone(), Some(media_path));
             }
         }
 
