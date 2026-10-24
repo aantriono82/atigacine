@@ -2,12 +2,14 @@
   import { cubicOut } from "svelte/easing";
   import { onMount, tick } from "svelte";
   import { fly } from "svelte/transition";
-  import DialScale from "./DialScale.svelte";
   import Equalizer from "./Equalizer.svelte";
   import Playlist from "./Playlist.svelte";
-  import PlaybackIcon from "./PlaybackIcon.svelte";
+  import Toolbar from "./Toolbar.svelte";
+  import TvDial from "./TvDial.svelte";
   import type { EqualizerPreset } from "../stores/equalizerStore";
   import type { RecentFile } from "../lib/recent";
+  import type { ThumbnailPreview } from "../lib/thumbnailPreview";
+  import "../styles/retro-tv-buttons.css";
   import type { PlaybackStatus, Playlist as PlaylistModel, PlaylistItem, RepeatMode } from "../types";
 
   // Injected by vite.config.ts `define` at build/dev time (from package.json).
@@ -40,7 +42,7 @@
   export let onSeek: (position: number) => void;
   export let onSeekHover: (event: MouseEvent) => void;
   export let onSeekLeave: () => void;
-  export let thumbnailPreview: { left: number; position: number; imageUrl: string | null; loading: boolean } | null = null;
+  export let thumbnailPreview: ThumbnailPreview | null = null;
   export let speed: number;
   export let onSpeedCycle: () => void;
   export let onVolume: (volume: number) => void;
@@ -91,18 +93,6 @@
   export let onToggleFullscreen: () => void;
   export let onNativeVideoLayout: () => void = () => undefined;
 
-  type DialKind = "channel" | "volume";
-  type DialDrag = {
-    kind: DialKind;
-    pointerId: number;
-    startY: number;
-    startValue: number;
-    startedAt: number;
-    lastStep: number;
-    lastValue: number;
-    interactionScale: number;
-  };
-
   // The TV's CSS is authored against this fixed canvas. The outer frame is resized
   // to the rendered size so the transformed wrapper still participates in centering.
   const BASE_DESIGN_WIDTH = 1216;
@@ -113,7 +103,6 @@
   const SCALE_MAX = 1.9;
   const SAFE_VIEWPORT_MARGIN = 24;
 
-  let dialDrag: DialDrag | null = null;
   let playlistOpen = false;
   let drawerLayoutOpen = false;
   let stageElement: HTMLElement | undefined;
@@ -201,8 +190,6 @@
   $: layoutWidth = drawerIsOpen ? BASE_DESIGN_WIDTH + BASE_DRAWER_GAP + BASE_DRAWER_WIDTH : BASE_DESIGN_WIDTH;
   $: if (stageElement && layoutWidth) updateScale();
 
-  $: safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
-  $: safePosition = Math.min(Math.max(position, 0), safeDuration || 1);
   $: channelValue = channelCount > 0 ? Math.min(Math.max(currentChannel, 1), channelCount) : 0;
   $: channelLabelStep = channelCount > 12 ? Math.max(1, Math.ceil((channelCount - 1) / 6)) : 1;
   $: channelAngle = channelCount > 1 ? -135 + ((channelValue - 1) / (channelCount - 1)) * 270 : 0;
@@ -220,102 +207,6 @@
     const availableHeight = Math.max(stageElement.clientHeight - SAFE_VIEWPORT_MARGIN * 2, 1);
     const nextScale = Math.min(availableWidth / layoutWidth, availableHeight / BASE_DESIGN_HEIGHT);
     scaleFactor = clamp(nextScale, SCALE_MIN, SCALE_MAX);
-  }
-
-  function formatTime(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
-    const total = Math.floor(seconds);
-    const minutes = Math.floor(total / 60);
-    const remainder = total % 60;
-    return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-  }
-
-  function formatSpeed(value: number): string {
-    return `${value}x`;
-  }
-
-  function startDialDrag(kind: DialKind, event: PointerEvent): void {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    const dial = event.currentTarget as HTMLElement;
-    const renderedHeight = dial.getBoundingClientRect().height;
-    const designHeight = Math.max(dial.offsetHeight, 1);
-    const interactionScale = renderedHeight / designHeight || 1;
-    try {
-      dial.setPointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture can reject synthetic events used by browser automation.
-    }
-    dialDrag = {
-      kind,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      startValue: kind === "channel" ? channelValue : volumeValue,
-      startedAt: Date.now(),
-      lastStep: 0,
-      lastValue: volumeValue,
-      interactionScale,
-    };
-  }
-
-  function moveDial(event: PointerEvent): void {
-    if (!dialDrag || event.pointerId !== dialDrag.pointerId) return;
-
-    const delta = (dialDrag.startY - event.clientY) / dialDrag.interactionScale;
-    // TODO: upgrade this vertical drag interaction to full mouse-angle rotation.
-    if (dialDrag.kind === "channel") {
-      const step = Math.trunc(delta / 28);
-      if (step > dialDrag.lastStep) {
-        for (let index = dialDrag.lastStep; index < step; index += 1) onNext();
-      } else if (step < dialDrag.lastStep) {
-        for (let index = dialDrag.lastStep; index > step; index -= 1) onPrevious();
-      }
-      dialDrag.lastStep = step;
-      return;
-    }
-
-    const nextVolume = clamp(dialDrag.startValue + delta / 2, 0, 100);
-    if (Math.round(nextVolume) !== Math.round(dialDrag.lastValue)) {
-      dialDrag.lastValue = nextVolume;
-      onVolume(nextVolume);
-    }
-  }
-
-  function finishDialDrag(event: PointerEvent, shouldToggle = true): void {
-    if (!dialDrag || event.pointerId !== dialDrag.pointerId) return;
-    const activeDial = dialDrag;
-    const target = event.currentTarget as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
-    dialDrag = null;
-
-    const wasClick = Math.abs(event.clientY - activeDial.startY) < 8 * activeDial.interactionScale && Date.now() - activeDial.startedAt < 450;
-    if (!shouldToggle || !wasClick) return;
-    if (activeDial.kind === "channel") togglePlaylistDrawer();
-    else toggleEqualizerDrawer();
-  }
-
-  function handleDialKey(kind: DialKind, event: KeyboardEvent): void {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      if (kind === "channel") togglePlaylistDrawer();
-      else toggleEqualizerDrawer();
-      return;
-    }
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-
-    const increase = event.key === "ArrowUp" || event.key === "ArrowRight";
-    if (kind === "channel") {
-      if (increase) onNext();
-      else onPrevious();
-      return;
-    }
-
-    onVolume(clamp(volumeValue + (increase ? 5 : -5), 0, 100));
-  }
-
-  function seekFromInput(event: Event): void {
-    onSeek(Number((event.currentTarget as HTMLInputElement).value));
   }
 
   function closeDrawers(): void {
@@ -416,110 +307,67 @@
             >CRT {showCrtEffect ? "ON" : "OFF"}</button>
           </div>
 
-          <div class="tv-lower-strip">
-            <div class="physical-controls physical-controls-left" aria-label="Playback controls left">
-              <button class="physical-button" type="button" aria-label="Previous track" title="Previous track" onclick={onPrevious}>
-                <PlaybackIcon name="previous" />
-              </button>
-              <button class:active={status === "playing"} class="physical-button" type="button" aria-label="Play" aria-pressed={status === "playing"} title="Play" disabled={status === "playing"} onclick={onPlay}>
-                <PlaybackIcon name="play" />
-              </button>
-              <button class="physical-button" type="button" aria-label="Stop" title="Stop" onclick={onStop}>
-                <PlaybackIcon name="stop" />
-              </button>
-            </div>
-
-            <div class="seek-module">
-              {#if thumbnailPreview}
-                <div class="seek-preview" style={`left: ${thumbnailPreview.left}%`} aria-hidden="true">
-                  <div class="seek-preview-frame">
-                    {#if thumbnailPreview.imageUrl}
-                      <img src={thumbnailPreview.imageUrl} alt="" />
-                    {:else}
-                      <span class:loading={thumbnailPreview.loading} class="seek-preview-placeholder">{thumbnailPreview.loading ? "LOADING" : "NO FRAME"}</span>
-                    {/if}
-                  </div>
-                  <span>{formatTime(thumbnailPreview.position)}</span>
-                </div>
-              {/if}
-              <div class="seek-labels">
-                <span>{formatTime(position)}</span>
-                <span title={currentTrackName}>{currentTrackName || "TUNER READY"}</span>
-                <button class="speed-button" type="button" title="Cycle playback speed" aria-label={`Playback speed ${formatSpeed(speed)}`} onclick={onSpeedCycle} disabled={browserMode}>{formatSpeed(speed)}</button>
-                <span>{formatTime(duration)}</span>
-              </div>
-              <input
-                aria-label="Seek position"
-                type="range"
-                min="0"
-                max={safeDuration || 1}
-                step="0.1"
-                value={safePosition}
-                style={`--tv-seek-progress: ${safeDuration ? (safePosition / safeDuration) * 100 : 0}%`}
-                oninput={seekFromInput}
-                onmousemove={onSeekHover}
-                onmouseleave={onSeekLeave}
-              />
-            </div>
-
-            <div class="physical-controls physical-controls-right" aria-label="Playback controls right">
-              <button class="physical-button" type="button" aria-label="Next track" title="Next track" onclick={onNext}>
-                <PlaybackIcon name="next" />
-              </button>
-              <button class:active={status === "paused"} class="physical-button" type="button" aria-label="Pause" aria-pressed={status === "paused"} title="Pause" disabled={!isPlaying} onclick={onPause}>
-                <PlaybackIcon name="pause" />
-              </button>
-              <button class:active={muted} class="physical-button" type="button" aria-label={muted ? "Unmute" : "Mute"} aria-pressed={muted} title={muted ? "Unmute" : "Mute"} onclick={onMute}>
-                <PlaybackIcon name={muted ? "mute" : "volume"} />
-              </button>
-            </div>
-          </div>
+          <Toolbar
+            {status}
+            {isPlaying}
+            {muted}
+            {position}
+            {duration}
+            trackName={currentTrackName}
+            {speed}
+            speedDisabled={browserMode}
+            {thumbnailPreview}
+            {onPlay}
+            {onPause}
+            {onStop}
+            {onPrevious}
+            {onNext}
+            {onMute}
+            {onSeek}
+            {onSeekHover}
+            {onSeekLeave}
+            {onSpeedCycle}
+          />
         </div>
 
         <aside class="tv-control-panel" aria-label="Television controls">
-          <div class="dial-unit channel-unit">
-            <div class="dial-heading">
-              <span>CHANNEL</span>
-              <output>{channelValue ? String(channelValue).padStart(2, "0") : "--"}</output>
-            </div>
-            <div class="dial-wrap">
-              <DialScale minValue={1} maxValue={Math.max(channelCount, 1)} labelStep={channelLabelStep} activeValue={channelValue || null} showLabels={channelCount > 0} />
-              <div
-                class="dial channel-dial"
-                role="slider"
-                tabindex="0"
-                aria-label="Channel selector"
-                aria-valuemin="1"
-                aria-valuemax={Math.max(channelCount, 1)}
-                aria-valuenow={channelValue || 1}
-                style={`--dial-angle: ${channelAngle}deg`}
-                onpointerdown={(event) => startDialDrag("channel", event)}
-                onpointermove={moveDial}
-                onpointerup={finishDialDrag}
-                onpointercancel={(event) => finishDialDrag(event, false)}
-                onkeydown={(event) => handleDialKey("channel", event)}
-              >
-                <span class="dial-indicator" aria-hidden="true"></span>
-                <span class="dial-center" aria-hidden="true">{channelValue || "—"}</span>
-              </div>
-            </div>
-            <span class="dial-help">CLICK LIST · DRAG ↑ / ↓</span>
-          </div>
+          <TvDial
+            variant="channel"
+            mode="step"
+            label="CHANNEL"
+            readout={channelValue ? String(channelValue).padStart(2, "0") : "--"}
+            ariaLabel="Channel selector"
+            help="CLICK LIST · DRAG ↑ / ↓"
+            min={1}
+            max={Math.max(channelCount, 1)}
+            value={channelValue}
+            ariaValueNow={channelValue || 1}
+            angle={channelAngle}
+            centerText={channelValue || "—"}
+            labelStep={channelLabelStep}
+            activeValue={channelValue || null}
+            showLabels={channelCount > 0}
+            onStep={(direction) => (direction > 0 ? onNext() : onPrevious())}
+            onActivate={togglePlaylistDrawer}
+          />
 
-          <div class="dial-unit volume-unit">
-            <div class="dial-heading">
-              <span>VOLUME</span>
-              <output>{Math.round(volumeValue)}%</output>
-            </div>
-            <div class="dial-wrap volume-wrap">
-              <DialScale minValue={0} maxValue={100} labelStep={20} />
-              <div class="dial volume-dial" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(volumeValue)} style={`--dial-angle: ${volumeAngle}deg`} onpointerdown={(event) => startDialDrag("volume", event)} onpointermove={moveDial} onpointerup={finishDialDrag} onpointercancel={(event) => finishDialDrag(event, false)} onkeydown={(event) => handleDialKey("volume", event)}>
-                <span class="dial-indicator" aria-hidden="true"></span>
-                <span class="dial-center" aria-hidden="true">{muted ? "×" : ""}</span>
-              </div>
-            </div>
-            <span class="dial-help">CLICK EQ · DRAG ↑ / ↓</span>
-          </div>
+          <TvDial
+            variant="volume"
+            mode="continuous"
+            label="VOLUME"
+            readout={`${Math.round(volumeValue)}%`}
+            ariaLabel="Volume"
+            help="CLICK EQ · DRAG ↑ / ↓"
+            min={0}
+            max={100}
+            value={volumeValue}
+            ariaValueNow={Math.round(volumeValue)}
+            angle={volumeAngle}
+            centerText={muted ? "×" : ""}
+            labelStep={20}
+            onChange={onVolume}
+            onActivate={toggleEqualizerDrawer}
+          />
 
           <div class="speaker-grille" aria-label="Speaker grille decoration">
             <div class="speaker-holes" aria-hidden="true">
@@ -917,262 +765,6 @@
     white-space: nowrap;
   }
 
-  .tv-lower-strip {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--tv-lower-gap);
-    min-width: 0;
-    min-height: var(--tv-lower-strip-height);
-    padding: var(--tv-lower-padding);
-    background: linear-gradient(180deg, var(--tv-wood-color), var(--tv-wood-dark));
-    border: var(--tv-lower-border) solid var(--tv-wood-dark);
-    box-shadow: inset 0 1px 0 var(--tv-wood-highlight), inset 0 -2px 0 var(--tv-wood-deep);
-  }
-
-  .physical-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--tv-button-gap);
-    min-width: 0;
-  }
-
-  .physical-button {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: var(--tv-button-size);
-    height: var(--tv-button-size);
-    color: var(--tv-button-text);
-    background:
-      radial-gradient(ellipse at 31% 18%, var(--tv-button-top-highlight) 0%, rgb(255 247 222 / 12%) 22%, transparent 52%),
-      radial-gradient(circle at 31% 23%, var(--tv-button-highlight) 0%, var(--tv-button-color) 46%, var(--tv-button-dark) 100%);
-    border: var(--tv-button-border) solid var(--tv-button-dark);
-    border-radius: 50%;
-    box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -2px -3px 3px var(--tv-button-shadow), 0 2px 3px var(--tv-shadow);
-    cursor: pointer;
-  }
-
-  .physical-button {
-    padding: 0.28rem;
-  }
-
-  .physical-button :global(.playback-icon) {
-    width: 56%;
-    height: 56%;
-    pointer-events: none;
-  }
-
-  .physical-button::before {
-    position: absolute;
-    top: 0.18rem;
-    right: 24%;
-    left: 24%;
-    height: 0.3rem;
-    content: "";
-    background: radial-gradient(ellipse at center, rgb(255 247 222 / 24%) 0%, rgb(255 247 222 / 10%) 34%, transparent 76%);
-    border-radius: 50%;
-    filter: blur(0.035rem);
-    opacity: 0.8;
-    pointer-events: none;
-  }
-
-  .physical-button:hover,
-  .physical-button:focus-visible {
-    color: var(--tv-button-active-text);
-    border-color: var(--tv-button-active-border);
-    outline: 2px solid var(--tv-button-active-border);
-    outline-offset: 2px;
-  }
-
-  .physical-button.active {
-    color: var(--tv-button-text);
-    border-color: var(--tv-button-active-border);
-    outline: 2px solid var(--tv-button-active-border);
-    outline-offset: 2px;
-    box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -2px -3px 3px var(--tv-button-shadow), 0 0 0.45rem rgb(243 189 93 / 60%), 0 2px 3px var(--tv-shadow);
-  }
-
-  .physical-button.active:hover,
-  .physical-button.active:focus-visible {
-    color: var(--tv-button-active-text);
-  }
-
-  .physical-button:disabled {
-    color: var(--tv-button-text);
-    cursor: not-allowed;
-    filter: none;
-    outline: 0;
-    transform: none;
-  }
-
-  .physical-button:disabled :global(.playback-icon) {
-    opacity: 0.42;
-  }
-
-  .physical-button.active:disabled {
-    color: var(--tv-button-text);
-    border-color: var(--tv-button-active-border);
-    outline: 2px solid var(--tv-button-active-border);
-    outline-offset: 2px;
-  }
-
-  .physical-button.active:disabled :global(.playback-icon) {
-    opacity: 0.62;
-  }
-
-  .physical-button:active {
-    box-shadow: inset 2px 2px 0 var(--tv-button-shadow), inset -1px -1px 0 var(--tv-button-shine), 0 1px 1px var(--tv-shadow);
-    transform: translateY(1px);
-  }
-
-  .physical-button:disabled:active {
-    box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -2px -3px 3px var(--tv-button-shadow), 0 2px 3px var(--tv-shadow);
-    transform: none;
-  }
-
-  .seek-module {
-    position: relative;
-    min-width: 0;
-  }
-
-  .seek-preview {
-    position: absolute;
-    z-index: 4;
-    bottom: calc(100% + 0.5rem);
-    display: grid;
-    justify-items: center;
-    width: 120px;
-    transform: translateX(-50%);
-    pointer-events: none;
-    color: var(--tv-lower-text);
-    font: 700 var(--tv-seek-label-size)/1 monospace;
-  }
-
-  .seek-preview-frame {
-    display: grid;
-    place-items: center;
-    width: 120px;
-    height: 90px;
-    overflow: hidden;
-    background: #24251f;
-    border: 3px solid var(--tv-bezel-highlight);
-    box-shadow: inset 0 0 0 1px var(--tv-shadow), 2px 2px 0 var(--tv-shadow);
-  }
-
-  .seek-preview-frame img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .seek-preview-placeholder {
-    color: var(--tv-lower-text);
-    font-size: 0.48rem;
-    letter-spacing: 0.06em;
-  }
-
-  .seek-preview-placeholder.loading {
-    animation: seek-preview-blink 850ms steps(2, end) infinite;
-  }
-
-  @keyframes seek-preview-blink {
-    50% { opacity: 0.35; }
-  }
-
-  .seek-labels {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    gap: var(--tv-seek-label-gap);
-    margin-bottom: var(--tv-seek-label-margin);
-    color: var(--tv-lower-text);
-    font: var(--tv-seek-label-size)/1 monospace;
-  }
-
-  .seek-labels span:nth-child(2) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: center;
-    white-space: nowrap;
-  }
-
-  .speed-button {
-    min-width: 2.5rem;
-    padding: 0.12rem 0.28rem;
-    color: var(--tv-button-text);
-    background: var(--tv-button-color);
-    border: 1px solid var(--tv-button-shadow);
-    border-color: var(--tv-button-shine) var(--tv-button-shadow) var(--tv-button-shadow) var(--tv-button-shine);
-    border-radius: 999px;
-    box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -1px -1px 0 var(--tv-button-shadow);
-    font: 700 var(--tv-seek-label-size)/1 monospace;
-    cursor: pointer;
-  }
-
-  .speed-button:hover,
-  .speed-button:focus-visible {
-    color: var(--tv-button-active-text);
-    background: var(--tv-button-color);
-    border-color: var(--tv-button-active-border);
-    outline: none;
-  }
-
-  .speed-button:active {
-    border-color: var(--tv-button-shadow) var(--tv-button-shine) var(--tv-button-shine) var(--tv-button-shadow);
-    box-shadow: inset 1px 1px 0 var(--tv-button-shadow), inset -1px -1px 0 var(--tv-button-shine);
-  }
-
-  .speed-button:disabled {
-    cursor: default;
-    opacity: 0.58;
-  }
-
-  .seek-module input {
-    width: 100%;
-    height: var(--tv-seek-height);
-    margin: 0;
-    appearance: none;
-    background: linear-gradient(to right, var(--tv-seek-progress-color) 0 var(--tv-seek-progress), var(--tv-seek-track) var(--tv-seek-progress) 100%);
-    border: 1px solid var(--tv-seek-border);
-    box-shadow: inset 1px 1px 0 var(--tv-seek-shadow), inset -1px -1px 0 var(--tv-seek-highlight);
-    cursor: pointer;
-  }
-
-  .seek-module input::-webkit-slider-runnable-track {
-    height: var(--tv-seek-track-height);
-    background: transparent;
-  }
-
-  .seek-module input::-webkit-slider-thumb {
-    width: var(--tv-seek-thumb-width);
-    height: var(--tv-seek-thumb-height);
-    margin-top: var(--tv-seek-thumb-offset);
-    appearance: none;
-    background: var(--tv-seek-thumb);
-    border: 1px solid var(--tv-seek-thumb-border);
-    box-shadow: inset 1px 1px 0 var(--tv-seek-highlight), inset -1px -1px 0 var(--tv-seek-shadow);
-  }
-
-  .seek-module input::-moz-range-track {
-    height: var(--tv-seek-track-height);
-    background: transparent;
-  }
-
-  .seek-module input::-moz-range-progress {
-    height: var(--tv-seek-track-height);
-    background: var(--tv-seek-progress-color);
-  }
-
-  .seek-module input::-moz-range-thumb {
-    width: var(--tv-seek-thumb-width);
-    height: var(--tv-seek-thumb-height);
-    background: var(--tv-seek-thumb);
-    border: 1px solid var(--tv-seek-thumb-border);
-    border-radius: 0;
-    box-shadow: inset 1px 1px 0 var(--tv-seek-highlight), inset -1px -1px 0 var(--tv-seek-shadow);
-  }
-
   .tv-control-panel {
     position: relative;
     display: grid;
@@ -1186,105 +778,6 @@
       repeating-linear-gradient(12deg, var(--tv-panel-color) 0 11px, var(--tv-panel-grain) 11px 13px);
     border: var(--tv-panel-border) solid var(--tv-panel-dark);
     box-shadow: inset 1px 1px 0 var(--tv-panel-highlight), inset -2px -2px 0 var(--tv-panel-shadow);
-  }
-
-  .dial-unit {
-    display: grid;
-    justify-items: center;
-    gap: var(--tv-dial-label-gap);
-    min-width: 0;
-  }
-
-  .channel-unit {
-    row-gap: 0;
-  }
-
-  .channel-unit .dial-wrap {
-    margin-top: -0.125rem;
-  }
-
-  .channel-unit .dial-help {
-    margin-top: -0.6375rem;
-  }
-
-  /* Tighten only the two requested panel transitions. */
-  .volume-unit {
-    margin-top: calc(var(--tv-dial-gap) * -0.85);
-  }
-
-  .dial-heading {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    color: var(--tv-panel-text);
-    font: 700 var(--tv-dial-label-size)/1 monospace;
-    letter-spacing: var(--tv-dial-label-spacing);
-  }
-
-  .dial-heading output {
-    color: var(--tv-panel-accent);
-  }
-
-  .dial-wrap {
-    position: relative;
-    width: min(100%, var(--tv-channel-dial-size));
-    aspect-ratio: 1;
-  }
-
-  .volume-wrap {
-    width: min(100%, var(--tv-volume-dial-size));
-  }
-
-  .dial {
-    position: absolute;
-    inset: var(--tv-dial-inset);
-    display: grid;
-    place-items: center;
-    color: var(--tv-dial-center-text);
-    background: radial-gradient(circle at 34% 28%, var(--tv-dial-shine), transparent 21%), linear-gradient(145deg, var(--tv-dial-metal), var(--tv-dial-dark));
-    border: var(--tv-dial-border) solid var(--tv-dial-dark);
-    border-radius: 50%;
-    box-shadow: inset 2px 2px 2px var(--tv-dial-highlight), inset -4px -4px 5px var(--tv-dial-shadow), 0 2px 3px var(--tv-shadow);
-    cursor: ns-resize;
-    touch-action: none;
-    user-select: none;
-  }
-
-  .dial:focus-visible {
-    outline: 2px solid var(--tv-panel-accent);
-    outline-offset: 3px;
-  }
-
-  .dial-indicator {
-    position: absolute;
-    top: var(--tv-dial-indicator-inset);
-    left: 50%;
-    width: var(--tv-dial-indicator-width);
-    height: var(--tv-dial-indicator-height);
-    background: var(--tv-dial-indicator);
-    border-radius: var(--tv-dial-indicator-radius);
-    box-shadow: 0 0 2px var(--tv-dial-indicator-shadow);
-    transform: translateX(-50%) rotate(var(--dial-angle));
-    transform-origin: 50% calc(100% + var(--tv-dial-indicator-origin));
-  }
-
-  .dial-center {
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    width: var(--tv-dial-center-size);
-    height: var(--tv-dial-center-size);
-    color: var(--tv-dial-center-text);
-    background: var(--tv-dial-center);
-    border: 1px solid var(--tv-dial-center-border);
-    border-radius: 50%;
-    font: 700 var(--tv-dial-center-label-size)/1 monospace;
-  }
-
-  .dial-help {
-    color: var(--tv-panel-muted);
-    font: var(--tv-dial-help-size)/1 monospace;
-    letter-spacing: var(--tv-dial-help-spacing);
   }
 
   .speaker-grille {
@@ -1355,38 +848,6 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--tv-utility-gap);
-  }
-
-  .utility-button {
-    width: auto;
-    min-width: 0;
-    height: var(--tv-utility-height);
-    padding: var(--tv-utility-padding);
-    overflow: hidden;
-    border-radius: 0.28rem;
-    background:
-      linear-gradient(180deg, rgb(255 247 222 / 20%), transparent 25%),
-      linear-gradient(180deg, #71695e 0%, #4b4741 48%, #25221e 100%);
-    border-color: #918575 #171410 #171410 #918575;
-    box-shadow: inset 1px 1px 0 rgb(255 247 222 / 24%), inset -2px -2px 0 rgb(15 12 9 / 80%), 0 2px 2px var(--tv-shadow);
-    font: 700 var(--tv-dial-label-size)/1 monospace;
-    letter-spacing: 0.08em;
-    text-shadow: 0 1px 1px rgb(0 0 0 / 80%);
-    transition: transform 80ms ease, box-shadow 80ms ease;
-  }
-
-  .utility-button::before {
-    top: 0.14rem;
-    right: 14%;
-    left: 14%;
-    height: 0.18rem;
-    background: linear-gradient(90deg, transparent, rgb(255 247 222 / 28%), transparent);
-    filter: blur(0.035rem);
-  }
-
-  .utility-button:active {
-    box-shadow: inset 2px 2px 0 rgb(15 12 9 / 72%), inset -1px -1px 0 rgb(255 247 222 / 18%), 0 1px 1px var(--tv-shadow);
-    transform: translateY(2px);
   }
 
   .audio-jacks {
@@ -1632,31 +1093,6 @@
 
     .side-drawer {
       right: calc(var(--tv-control-width-compact) + var(--tv-panel-gap));
-    }
-
-    .tv-lower-strip {
-      grid-template-columns: 1fr;
-      gap: var(--tv-compact-lower-gap);
-    }
-
-    .physical-controls {
-      justify-content: center;
-    }
-
-    .physical-controls-left {
-      grid-row: 2;
-    }
-
-    .seek-module {
-      grid-row: 1;
-    }
-
-    .physical-controls-right {
-      grid-row: 3;
-    }
-
-    .seek-labels span:nth-child(2) {
-      display: none;
     }
 
   }

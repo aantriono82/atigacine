@@ -1,0 +1,131 @@
+/*
+ * Physical TV buttons are shared by the lower transport strip (Toolbar.svelte)
+ * and the side control panel (PlayerRetroTV.svelte). Selectors are prefixed
+ * with .retro-tv-stage to keep the specificity of Svelte's scoped styles.
+ */
+
+.retro-tv-stage .physical-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tv-button-size);
+  height: var(--tv-button-size);
+  color: var(--tv-button-text);
+  background:
+    radial-gradient(ellipse at 31% 18%, var(--tv-button-top-highlight) 0%, rgb(255 247 222 / 12%) 22%, transparent 52%),
+    radial-gradient(circle at 31% 23%, var(--tv-button-highlight) 0%, var(--tv-button-color) 46%, var(--tv-button-dark) 100%);
+  border: var(--tv-button-border) solid var(--tv-button-dark);
+  border-radius: 50%;
+  box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -2px -3px 3px var(--tv-button-shadow), 0 2px 3px var(--tv-shadow);
+  cursor: pointer;
+}
+
+.retro-tv-stage .physical-button {
+  padding: 0.28rem;
+}
+
+.retro-tv-stage .physical-button .playback-icon {
+  width: 56%;
+  height: 56%;
+  pointer-events: none;
+}
+
+.retro-tv-stage .physical-button::before {
+  position: absolute;
+  top: 0.18rem;
+  right: 24%;
+  left: 24%;
+  height: 0.3rem;
+  content: "";
+  background: radial-gradient(ellipse at center, rgb(255 247 222 / 24%) 0%, rgb(255 247 222 / 10%) 34%, transparent 76%);
+  border-radius: 50%;
+  filter: blur(0.035rem);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.retro-tv-stage .physical-button:hover,
+.retro-tv-stage .physical-button:focus-visible {
+  color: var(--tv-button-active-text);
+  border-color: var(--tv-button-active-border);
+  outline: 2px solid var(--tv-button-active-border);
+  outline-offset: 2px;
+}
+
+.retro-tv-stage .physical-button.active {
+  color: var(--tv-button-text);
+  border-color: var(--tv-button-active-border);
+  outline: 2px solid var(--tv-button-active-border);
+  outline-offset: 2px;
+  box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -2px -3px 3px var(--tv-button-shadow), 0 0 0.45rem rgb(243 189 93 / 60%), 0 2px 3px var(--tv-shadow);
+}
+
+.retro-tv-stage .physical-button.active:hover,
+.retro-tv-stage .physical-button.active:focus-visible {
+  color: var(--tv-button-active-text);
+}
+
+.retro-tv-stage .physical-button:disabled {
+  color: var(--tv-button-text);
+  cursor: not-allowed;
+  filter: none;
+  outline: 0;
+  transform: none;
+}
+
+.retro-tv-stage .physical-button:disabled .playback-icon {
+  opacity: 0.42;
+}
+
+.retro-tv-stage .physical-button.active:disabled {
+  color: var(--tv-button-text);
+  border-color: var(--tv-button-active-border);
+  outline: 2px solid var(--tv-button-active-border);
+  outline-offset: 2px;
+}
+
+.retro-tv-stage .physical-button.active:disabled .playback-icon {
+  opacity: 0.62;
+}
+
+.retro-tv-stage .physical-button:active {
+  box-shadow: inset 2px 2px 0 var(--tv-button-shadow), inset -1px -1px 0 var(--tv-button-shine), 0 1px 1px var(--tv-shadow);
+  transform: translateY(1px);
+}
+
+.retro-tv-stage .physical-button:disabled:active {
+  box-shadow: inset 1px 1px 0 var(--tv-button-shine), inset -2px -3px 3px var(--tv-button-shadow), 0 2px 3px var(--tv-shadow);
+  transform: none;
+}
+
+.retro-tv-stage .utility-button {
+  width: auto;
+  min-width: 0;
+  height: var(--tv-utility-height);
+  padding: var(--tv-utility-padding);
+  overflow: hidden;
+  border-radius: 0.28rem;
+  background:
+    linear-gradient(180deg, rgb(255 247 222 / 20%), transparent 25%),
+    linear-gradient(180deg, #71695e 0%, #4b4741 48%, #25221e 100%);
+  border-color: #918575 #171410 #171410 #918575;
+  box-shadow: inset 1px 1px 0 rgb(255 247 222 / 24%), inset -2px -2px 0 rgb(15 12 9 / 80%), 0 2px 2px var(--tv-shadow);
+  font: 700 var(--tv-dial-label-size)/1 monospace;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 80%);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+
+.retro-tv-stage .utility-button::before {
+  top: 0.14rem;
+  right: 14%;
+  left: 14%;
+  height: 0.18rem;
+  background: linear-gradient(90deg, transparent, rgb(255 247 222 / 28%), transparent);
+  filter: blur(0.035rem);
+}
+
+.retro-tv-stage .utility-button:active {
+  box-shadow: inset 2px 2px 0 rgb(15 12 9 / 72%), inset -1px -1px 0 rgb(255 247 222 / 18%), 0 1px 1px var(--tv-shadow);
+  transform: translateY(2px);
+}

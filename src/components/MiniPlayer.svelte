@@ -14,6 +14,7 @@
     setProperty,
     OBSERVED_PROPERTIES,
   } from "../lib/mpv";
+  import { formatTime } from "../lib/time";
 
   const LABEL = "mini-player";
   const query = new URLSearchParams(window.location.search);
@@ -33,12 +34,6 @@
   let unobserve: (() => void) | undefined;
   let unlistenEvents: (() => void) | undefined;
   let closeUnlisten: (() => void) | undefined;
-
-  function formatTime(value: number): string {
-    if (!Number.isFinite(value) || value < 0) return "00:00";
-    const seconds = Math.floor(value);
-    return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
-  }
 
   async function togglePlayback(): Promise<void> {
     paused = !paused;

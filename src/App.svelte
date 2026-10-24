@@ -17,9 +17,10 @@
     setEqualizer,
     setPlaybackSpeed,
     setProperty,
-    syncMpvVideo,
     OBSERVED_PROPERTIES,
   } from "./lib/mpv";
+  import { createNativeVideoSync } from "./lib/nativeVideoSync";
+  import { createThumbnailPreview, type ThumbnailPreview } from "./lib/thumbnailPreview";
   import { loadSession, saveSession } from "./lib/session";
   import { createRecentItemId, loadRecentFiles, recordRecentFiles, type RecentFile } from "./lib/recent";
   import {
@@ -97,17 +98,7 @@
   let positionTimer: number | undefined;
   let pendingPosition: number | null = null;
   let equalizerTimer: number | undefined;
-  let thumbnailTimer: number | undefined;
-  let thumbnailRequest = 0;
-  let thumbnailInFlightRequest: number | null = null;
-  let thumbnailCancelRequested = false;
-  let thumbnailOwnerActive = true;
-  let nativeVideoSyncFrame: number | undefined;
-  let nativeVideoSyncTimer: number | undefined;
-  const nativeVideoRetryTimers: number[] = [];
-  const THUMBNAIL_CACHE_LIMIT = 40;
-  const thumbnailCache = new SvelteMap<number, string>();
-  let thumbnailPreview: { left: number; position: number; imageUrl: string | null; loading: boolean } | null = null;
+  let thumbnailPreview: ThumbnailPreview | null = null;
   let sessionSaveQueue = Promise.resolve();
   let playbackPersistence: PlaybackPersistence = createPlaybackPersistence();
   let lastPlaybackSaveAt = 0;
@@ -128,6 +119,20 @@
   let windowMinimized = false;
   let windowFocusUnlisten: (() => void) | undefined;
 
+  const thumbnails = createThumbnailPreview({
+    isEnabled: () => !browserMode && initialized,
+    getDuration: () => get(playerStore).duration,
+    onChange: (preview) => {
+      thumbnailPreview = preview;
+    },
+  });
+  const nativeVideo = createNativeVideoSync({
+    enabled: !browserMode,
+    isWindowActive: () => windowActive,
+    isPlaying: () => isPlaying,
+    hasMedia: () => Boolean(get(playerStore).currentFile),
+  });
+
   $: isPlaying = $playerStore.status === "playing";
   $: windowActive = windowFocused && documentVisible && !windowMinimized;
   $: currentPlaylistIndex = standaloneItem ? -1 : $activePlaylistStore?.items.findIndex((item) => item.id === $currentItemId) ?? -1;
@@ -147,86 +152,6 @@
 
   function speedLabel(speed: number): string {
     return `${speed}x`;
-  }
-
-  function formatThumbnailPosition(position: number): number {
-    return Math.round(position * 2) / 2;
-  }
-
-  function cacheThumbnail(position: number, imageUrl: string): void {
-    const previousUrl = thumbnailCache.get(position);
-    if (previousUrl) URL.revokeObjectURL(previousUrl);
-
-    thumbnailCache.delete(position);
-    thumbnailCache.set(position, imageUrl);
-
-    while (thumbnailCache.size > THUMBNAIL_CACHE_LIMIT) {
-      const oldestPosition = thumbnailCache.keys().next().value;
-      if (oldestPosition === undefined) break;
-
-      const oldestUrl = thumbnailCache.get(oldestPosition);
-      thumbnailCache.delete(oldestPosition);
-      if (oldestUrl) URL.revokeObjectURL(oldestUrl);
-    }
-  }
-
-  function cancelThumbnailCapture(): void {
-    if (browserMode || !initialized || thumbnailInFlightRequest === null || thumbnailCancelRequested) return;
-
-    thumbnailCancelRequested = true;
-    void invoke("cancel_thumbnail_capture", {
-      windowLabel: getCurrentWindow().label,
-    }).catch(() => undefined);
-  }
-
-  function handleSeekHover(event: MouseEvent): void {
-    if (browserMode || !initialized || !get(playerStore).duration) return;
-    const input = event.currentTarget as HTMLInputElement;
-    const bounds = input.getBoundingClientRect();
-    const left = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100));
-    const position = formatThumbnailPosition((left / 100) * get(playerStore).duration);
-    const cached = thumbnailCache.get(position);
-    thumbnailPreview = { left, position, imageUrl: cached ?? null, loading: !cached };
-
-    if (thumbnailTimer) window.clearTimeout(thumbnailTimer);
-    const request = ++thumbnailRequest;
-    cancelThumbnailCapture();
-    if (cached) return;
-
-    thumbnailTimer = window.setTimeout(() => {
-      thumbnailTimer = undefined;
-      thumbnailInFlightRequest = request;
-      thumbnailCancelRequested = false;
-      void invoke<number[]>("capture_thumbnail", {
-        position,
-        windowLabel: getCurrentWindow().label,
-      }).then((bytes) => {
-        const imageUrl = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
-        if (!thumbnailOwnerActive) {
-          URL.revokeObjectURL(imageUrl);
-          return;
-        }
-        cacheThumbnail(position, imageUrl);
-        if (request === thumbnailRequest) {
-          thumbnailPreview = { left, position, imageUrl, loading: false };
-        }
-      }).catch(() => {
-        if (request === thumbnailRequest) thumbnailPreview = { left, position, imageUrl: null, loading: false };
-      }).finally(() => {
-        if (thumbnailInFlightRequest === request) {
-          thumbnailInFlightRequest = null;
-          thumbnailCancelRequested = false;
-        }
-      });
-    }, 180);
-  }
-
-  function handleSeekLeave(): void {
-    if (thumbnailTimer) window.clearTimeout(thumbnailTimer);
-    thumbnailTimer = undefined;
-    thumbnailRequest += 1;
-    cancelThumbnailCapture();
-    thumbnailPreview = null;
   }
 
   async function resetPlaybackSpeed(): Promise<void> {
@@ -576,7 +501,7 @@
       const loadArguments: (string | boolean | number)[] = [item.path, "replace"];
       if (requestedPosition > 0) loadArguments.push(`start=${requestedPosition}`);
       await command("loadfile", loadArguments);
-      scheduleNativeVideoLayout();
+      nativeVideo.schedule();
       if (!autoPlay) {
         await setProperty("pause", true);
         if (requestedPosition > 0) await command("seek", [requestedPosition, "absolute"]);
@@ -1378,61 +1303,6 @@
     persistCurrentPlaybackPosition(true);
   }
 
-  const NATIVE_VIDEO_SYNC_INTERVAL_MS = 900;
-
-  function syncNativeVideoLayout(requirePlaying = false): void {
-    if (browserMode || !windowActive || (requirePlaying && !isPlaying)) return;
-
-    const viewport = document.querySelector<HTMLElement>("[data-native-video-viewport]");
-    if (!viewport) return;
-
-    const rect = viewport.getBoundingClientRect();
-    const bounds = {
-      x: rect.left,
-      y: rect.top,
-      width: rect.width,
-      height: rect.height,
-    };
-    void syncMpvVideo(bounds, Boolean(get(playerStore).currentFile)).catch(() => undefined);
-  }
-
-  function scheduleNativeVideoLayout(withRetry = false, requirePlaying = false): void {
-    if (browserMode || nativeVideoSyncFrame !== undefined) return;
-    nativeVideoSyncFrame = window.requestAnimationFrame(() => {
-      nativeVideoSyncFrame = undefined;
-      syncNativeVideoLayout(requirePlaying);
-    });
-
-    if (withRetry) {
-      for (const delay of [50, 200, 500]) {
-        let timer = 0;
-        timer = window.setTimeout(() => {
-          const timerIndex = nativeVideoRetryTimers.indexOf(timer);
-          if (timerIndex >= 0) nativeVideoRetryTimers.splice(timerIndex, 1);
-          scheduleNativeVideoLayout(false, requirePlaying);
-        }, delay);
-        nativeVideoRetryTimers.push(timer);
-      }
-    }
-  }
-
-  function startNativeVideoSyncLoop(): void {
-    if (browserMode || nativeVideoSyncTimer !== undefined) return;
-
-    nativeVideoSyncTimer = window.setInterval(() => {
-      if (isPlaying && windowActive && get(playerStore).currentFile) {
-        scheduleNativeVideoLayout(false, true);
-      }
-    }, NATIVE_VIDEO_SYNC_INTERVAL_MS);
-    if (get(playerStore).currentFile) scheduleNativeVideoLayout(false, true);
-  }
-
-  function stopNativeVideoSyncLoop(): void {
-    if (nativeVideoSyncTimer === undefined) return;
-    window.clearInterval(nativeVideoSyncTimer);
-    nativeVideoSyncTimer = undefined;
-  }
-
   async function syncWindowMinimizedState(): Promise<void> {
     if (!isTauriRuntime()) return;
 
@@ -1444,9 +1314,9 @@
   }
 
   $: if (initialized && isPlaying && windowActive) {
-    startNativeVideoSyncLoop();
+    nativeVideo.startLoop();
   } else {
-    stopNativeVideoSyncLoop();
+    nativeVideo.stopLoop();
   }
 
   onMount(() => {
@@ -1527,7 +1397,7 @@
         }
         initialized = true;
         updatePlayer({ initialized: true, message: "Native libmpv ready" });
-        scheduleNativeVideoLayout(true);
+        nativeVideo.schedule(true);
 
         scheduleEqualizerApply();
 
@@ -1537,7 +1407,7 @@
           switch (name) {
             case "filename":
               updatePlayer({ currentFile: data, message: data ? "Loaded" : "Ready" });
-              scheduleNativeVideoLayout(true);
+              nativeVideo.schedule(true);
               if (data) scheduleEqualizerApply();
               break;
             case "time-pos":
@@ -1546,7 +1416,7 @@
               break;
             case "duration":
               updatePlayer({ duration: data ?? 0 });
-              scheduleNativeVideoLayout(true);
+              nativeVideo.schedule(true);
               break;
             case "demuxer-cache-duration":
               updatePlayer({ bufferDuration: Math.max(0, data ?? 0) });
@@ -1569,7 +1439,7 @@
               break;
             case "video-params/w":
               updatePlayer({ width: data });
-              scheduleNativeVideoLayout(true);
+              nativeVideo.schedule(true);
               break;
             case "video-params/h":
               updatePlayer({ height: data });
@@ -1710,7 +1580,6 @@
 
     return () => {
       active = false;
-      thumbnailOwnerActive = false;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleWindowFocus);
       window.removeEventListener("blur", handleWindowBlur);
@@ -1721,15 +1590,8 @@
       if (volumeTimer !== undefined) window.clearTimeout(volumeTimer);
       volumeTimer = undefined;
       pendingVolume = null;
-      if (thumbnailTimer) window.clearTimeout(thumbnailTimer);
-      cancelThumbnailCapture();
-      if (nativeVideoSyncFrame !== undefined) window.cancelAnimationFrame(nativeVideoSyncFrame);
-      nativeVideoSyncFrame = undefined;
-      stopNativeVideoSyncLoop();
-      for (const timer of nativeVideoRetryTimers) window.clearTimeout(timer);
-      nativeVideoRetryTimers.length = 0;
-      for (const imageUrl of thumbnailCache.values()) URL.revokeObjectURL(imageUrl);
-      thumbnailCache.clear();
+      thumbnails.dispose();
+      nativeVideo.dispose();
       clearPositionUpdate();
       if (equalizerTimer) window.clearTimeout(equalizerTimer);
       unobserve?.();
@@ -1800,8 +1662,8 @@
       onPrevious={() => playAdjacent(-1)}
       onNext={() => playAdjacent(1)}
       onSeek={seek}
-      onSeekHover={handleSeekHover}
-      onSeekLeave={handleSeekLeave}
+      onSeekHover={thumbnails.hover}
+      onSeekLeave={thumbnails.leave}
       {thumbnailPreview}
       speed={speedValue}
       onSpeedCycle={cyclePlaybackSpeed}
@@ -1851,7 +1713,7 @@
       onToggleCrtEffect={toggleCrtEffect}
       onToggleMiniPlayer={enterMiniPlayer}
       onToggleFullscreen={() => void toggleFullscreen()}
-      onNativeVideoLayout={() => scheduleNativeVideoLayout()}
+      onNativeVideoLayout={() => nativeVideo.schedule()}
     />
   </div>
 
