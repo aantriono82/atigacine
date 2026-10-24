@@ -74,6 +74,9 @@
   const smokeVideo = new URLSearchParams(window.location.search).get("video") ?? import.meta.env.VITE_SMOKE_VIDEO;
   const miniMode = new URLSearchParams(window.location.search).get("mini") === "1";
   const SPEED_PRESETS = [1, 1.25, 1.5, 2, 0.5, 0.75] as const;
+  // Each UI update costs WebKitGTK a full repaint cycle; five per second keeps
+  // the clock and seek bar smooth enough while staying light on low-end CPUs.
+  const POSITION_UPDATE_INTERVAL_MS = 200;
 
   let isDropActive = false;
   let isFullscreen = false;
@@ -1279,7 +1282,7 @@
       positionTimer = undefined;
       if (pendingPosition !== null) updatePlayer({ position: pendingPosition });
       pendingPosition = null;
-    }, 100);
+    }, POSITION_UPDATE_INTERVAL_MS);
   }
 
   function clearPositionUpdate(): void {

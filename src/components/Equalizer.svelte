@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { audioLevels, type AudioLevels } from "../lib/audioLevels";
+  import { audioLevels } from "../lib/audioLevels";
   import { EQUALIZER_BANDS, type EqualizerPreset } from "../stores/equalizerStore";
 
   export let enabled: boolean;
@@ -13,6 +13,8 @@
   export let onClose: () => void;
   export let isPlaying: boolean;
   export let windowActive: boolean;
+  /** Playback position; each update advances the level history. */
+  export let position: number;
 
   // The bars are a stereo level history: left channel on the left half, right
   // on the right, newest readings at the center scrolling outward.
@@ -22,18 +24,23 @@
   let leftHistory = Array.from({ length: HALF_BAR_COUNT }, () => VISUALIZER_FLOOR);
   let rightHistory = Array.from({ length: HALF_BAR_COUNT }, () => VISUALIZER_FLOOR);
 
-  function pushLevels(levels: AudioLevels, active: boolean): void {
+  function pushLevels(active: boolean): void {
     if (!active) {
       leftHistory = leftHistory.map(() => VISUALIZER_FLOOR);
       rightHistory = rightHistory.map(() => VISUALIZER_FLOOR);
       return;
     }
 
-    leftHistory = [Math.max(VISUALIZER_FLOOR, levels.left), ...leftHistory.slice(0, -1)];
-    rightHistory = [Math.max(VISUALIZER_FLOOR, levels.right), ...rightHistory.slice(0, -1)];
+    leftHistory = [Math.max(VISUALIZER_FLOOR, $audioLevels.left), ...leftHistory.slice(0, -1)];
+    rightHistory = [Math.max(VISUALIZER_FLOOR, $audioLevels.right), ...rightHistory.slice(0, -1)];
   }
 
-  $: pushLevels($audioLevels, isPlaying && windowActive);
+  // Advance with the position updates instead of every level reading, so the
+  // bars move in the same repaint as the clock (see the speaker visualizer).
+  $: {
+    void position;
+    pushLevels(isPlaying && windowActive);
+  }
   $: visualizerLevels = [...[...leftHistory].reverse(), ...rightHistory];
 </script>
 
@@ -58,7 +65,7 @@
 
   <div class="visualizer" aria-label="Audio level meter" aria-hidden="true">
     {#each visualizerLevels as level, index (index)}
-      <span class="visualizer-bar" style={`height: ${Math.round(level * 100)}%`}></span>
+      <span class="visualizer-bar" style={`transform: scaleY(${level.toFixed(2)})`}></span>
     {/each}
   </div>
 
@@ -178,11 +185,14 @@
     display: block;
     width: 100%;
     max-width: 0.75rem;
-    min-height: 6%;
+    height: 100%;
     background: linear-gradient(to top, #36b86b 0%, #c7d34d 48%, #e99a35 76%, #d84432 100%);
     border: 1px solid rgb(255 222 139 / 22%);
     box-shadow: 0 0 0.25rem rgb(221 91 39 / 45%);
-    transition: height 140ms ease-out;
+    transform-origin: bottom;
+    /* Scaling instead of resizing lets the compositor move the bars without
+       repainting the panel. */
+    will-change: transform;
   }
 
   .panel-kicker {

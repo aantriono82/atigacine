@@ -111,8 +111,6 @@
   let nativeVideoViewportElement: HTMLElement | undefined;
   let scaleFactor = 1;
   let resizeFrame: number | undefined;
-  let speakerVisualizerTimer: number | undefined;
-  let mounted = false;
   const speakerHoles = Array.from({ length: 40 }, (_, index) => index);
   // At full level half of the holes light up; quiet passages light only a few.
   const speakerMaxLitCount = Math.round(speakerHoles.length * 0.5);
@@ -140,26 +138,15 @@
     });
   }
 
-  function startSpeakerVisualizer(): void {
-    if (!mounted || !isPlaying || !windowActive || speakerVisualizerTimer !== undefined) return;
-    speakerVisualizerTimer = window.setInterval(updateSpeakerVisualizer, 180);
-  }
-
-  function stopSpeakerVisualizer(): void {
-    if (speakerVisualizerTimer === undefined) return;
-    window.clearInterval(speakerVisualizerTimer);
-    speakerVisualizerTimer = undefined;
-  }
-
-  $: if (isPlaying && windowActive) {
-    startSpeakerVisualizer();
-  } else {
-    stopSpeakerVisualizer();
+  // Refresh on each position update rather than on a timer of its own, so the
+  // glow change lands in the same repaint. Every repaint costs WebKitGTK a lot
+  // of CPU, however small the changed area.
+  $: {
+    void position;
+    if (isPlaying && windowActive) updateSpeakerVisualizer();
   }
 
   onMount(() => {
-    mounted = true;
-    startSpeakerVisualizer();
     const scheduleLayoutUpdate = (): void => {
       if (resizeFrame !== undefined) return;
       resizeFrame = window.requestAnimationFrame(() => {
@@ -179,8 +166,6 @@
     scheduleLayoutUpdate();
     window.addEventListener("resize", scheduleLayoutUpdate, { passive: true });
     return () => {
-      mounted = false;
-      stopSpeakerVisualizer();
       window.removeEventListener("resize", scheduleLayoutUpdate);
       resizeObserver?.disconnect();
       if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
@@ -472,6 +457,7 @@
           onClose={closeDrawers}
           {isPlaying}
           {windowActive}
+          {position}
         />
       </aside>
     {/if}
@@ -811,6 +797,7 @@
   }
 
   .speaker-hole {
+    position: relative;
     width: min(100%, 0.72rem);
     aspect-ratio: 1;
     background:
@@ -818,14 +805,23 @@
       radial-gradient(circle, var(--tv-speaker-hole) 0 45%, #1b1f1d 56%, var(--tv-speaker-hole-edge) 66%, #111412 78%, #3b403b 100%);
     border-radius: 50%;
     box-shadow: inset 0 0.08rem 0.14rem rgb(0 0 0 / 88%), 0 -0.035rem 0.06rem rgb(255 255 255 / 22%);
-    transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
   }
 
-  .speaker-hole.lit {
+  .speaker-hole::after {
+    position: absolute;
+    inset: 0;
+    content: "";
     background:
       radial-gradient(circle at 35% 28%, #ffe5a7 0 7%, #e9aa4c 23%, #824a16 45%, #1b140c 68%, #5b5140 100%);
+    border-radius: 50%;
     box-shadow: 0 0 0.45rem var(--tv-speaker-hole-glow), inset 0 0.08rem 0.14rem rgb(0 0 0 / 78%), 0 -0.035rem 0.06rem rgb(255 226 155 / 42%);
+    opacity: 0;
     transform: scale(1.08);
+    will-change: opacity;
+  }
+
+  .speaker-hole.lit::after {
+    opacity: 1;
   }
 
   .speaker-label {
