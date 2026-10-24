@@ -20,6 +20,7 @@
     OBSERVED_PROPERTIES,
   } from "./lib/mpv";
   import { createNativeVideoSync } from "./lib/nativeVideoSync";
+  import { setAudioLevelPolling } from "./lib/audioLevels";
   import { createThumbnailPreview, type ThumbnailPreview } from "./lib/thumbnailPreview";
   import { loadSession, saveSession } from "./lib/session";
   import { createRecentItemId, loadRecentFiles, recordRecentFiles, type RecentFile } from "./lib/recent";
@@ -1312,6 +1313,8 @@
       windowMinimized = false;
     }
   }
+
+  $: setAudioLevelPolling(!browserMode && initialized && isPlaying && windowActive);
 
   $: if (initialized && isPlaying && windowActive) {
     nativeVideo.startLoop();

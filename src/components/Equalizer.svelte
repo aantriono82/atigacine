@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { audioLevels, type AudioLevels } from "../lib/audioLevels";
   import { EQUALIZER_BANDS, type EqualizerPreset } from "../stores/equalizerStore";
 
   export let enabled: boolean;
@@ -14,56 +14,27 @@
   export let isPlaying: boolean;
   export let windowActive: boolean;
 
+  // The bars are a stereo level history: left channel on the left half, right
+  // on the right, newest readings at the center scrolling outward.
   const VISUALIZER_BAR_COUNT = 16;
-  let visualizerTick = 0;
-  let visualizerLevels = Array.from({ length: VISUALIZER_BAR_COUNT }, () => 0.08);
-  let visualizerTimer: number | undefined;
-  let mounted = false;
+  const HALF_BAR_COUNT = VISUALIZER_BAR_COUNT / 2;
+  const VISUALIZER_FLOOR = 0.06;
+  let leftHistory = Array.from({ length: HALF_BAR_COUNT }, () => VISUALIZER_FLOOR);
+  let rightHistory = Array.from({ length: HALF_BAR_COUNT }, () => VISUALIZER_FLOOR);
 
-  function updateVisualizer(): void {
-    visualizerTick += 1;
-
-    if (!isPlaying) {
-      visualizerLevels = visualizerLevels.map((level) => Math.max(0.06, level * 0.76));
+  function pushLevels(levels: AudioLevels, active: boolean): void {
+    if (!active) {
+      leftHistory = leftHistory.map(() => VISUALIZER_FLOOR);
+      rightHistory = rightHistory.map(() => VISUALIZER_FLOOR);
       return;
     }
 
-    // TODO(stage 2): replace these procedural levels with real libmpv astats metadata.
-    visualizerLevels = visualizerLevels.map((level, index) => {
-      const phase = visualizerTick * 0.34 + index * 0.71;
-      const wave = (Math.sin(phase) + 1) / 2;
-      const ripple = (Math.sin(visualizerTick * 0.17 + index * 1.83) + 1) / 2;
-      const target = Math.min(0.96, 0.16 + wave * 0.48 + ripple * 0.28);
-      const decayed = level * 0.78;
-      return Math.max(target, decayed);
-    });
+    leftHistory = [Math.max(VISUALIZER_FLOOR, levels.left), ...leftHistory.slice(0, -1)];
+    rightHistory = [Math.max(VISUALIZER_FLOOR, levels.right), ...rightHistory.slice(0, -1)];
   }
 
-  function startVisualizer(): void {
-    if (!mounted || !isPlaying || !windowActive || visualizerTimer !== undefined) return;
-    visualizerTimer = window.setInterval(updateVisualizer, 90);
-  }
-
-  function stopVisualizer(): void {
-    if (visualizerTimer === undefined) return;
-    window.clearInterval(visualizerTimer);
-    visualizerTimer = undefined;
-  }
-
-  $: if (isPlaying && windowActive) {
-    startVisualizer();
-  } else {
-    stopVisualizer();
-  }
-
-  onMount(() => {
-    mounted = true;
-    startVisualizer();
-    return () => {
-      mounted = false;
-      stopVisualizer();
-    };
-  });
+  $: pushLevels($audioLevels, isPlaying && windowActive);
+  $: visualizerLevels = [...[...leftHistory].reverse(), ...rightHistory];
 </script>
 
 <section class="equalizer-panel" aria-label="Audio equalizer">
@@ -85,7 +56,7 @@
     </div>
   </div>
 
-  <div class="visualizer" aria-label="Procedural audio visualizer" aria-hidden="true">
+  <div class="visualizer" aria-label="Audio level meter" aria-hidden="true">
     {#each visualizerLevels as level, index (index)}
       <span class="visualizer-bar" style={`height: ${Math.round(level * 100)}%`}></span>
     {/each}

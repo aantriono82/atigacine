@@ -1,3 +1,4 @@
+mod audio_levels;
 mod commands;
 mod playlist;
 
@@ -5,6 +6,7 @@ mod playlist;
 pub fn run() {
     tauri::Builder::default()
         .manage(commands::ThumbnailCaptureState::default())
+        .manage(audio_levels::AudioLevelState::default())
         .plugin(tauri_plugin_libmpv::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -13,6 +15,7 @@ pub fn run() {
             commands::path_exists,
             commands::expand_drop_paths,
             commands::set_equalizer,
+            commands::get_audio_levels,
             commands::set_playback_speed,
             commands::cancel_thumbnail_capture,
             commands::capture_thumbnail,
