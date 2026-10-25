@@ -96,7 +96,7 @@
 
   // The TV's CSS is authored against this fixed canvas. The outer frame is resized
   // to the rendered size so the transformed wrapper still participates in centering.
-  const BASE_DESIGN_WIDTH = 1216;
+  const BASE_DESIGN_WIDTH = 1400;
   const BASE_DESIGN_HEIGHT = 860;
   const BASE_DRAWER_WIDTH = 336;
   const BASE_DRAWER_GAP = 16;

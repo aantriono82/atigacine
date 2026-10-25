@@ -27,7 +27,7 @@
   --tv-wood-grain: rgb(35 8 2 / 38%);
   --tv-wood-highlight: rgb(255 197 120 / 55%);
   --tv-casing-radius: 1.15rem 1.4rem 1rem 1rem;
-  --tv-casing-max-width: 76rem;
+  --tv-casing-max-width: 87.5rem;
   --tv-casing-padding: clamp(0.55rem, 1.3vw, 1.1rem);
   --tv-casing-border: clamp(0.3rem, 0.7vw, 0.65rem);
   --tv-casing-shadow-y: 0.45rem;
@@ -150,7 +150,7 @@
   --tv-dial-label-spacing: 0.11em;
   --tv-dial-help-size: 0.47rem;
   --tv-dial-help-spacing: 0.1em;
-  --tv-screen-aspect-ratio: 4 / 3;
+  --tv-screen-aspect-ratio: 16 / 10;
   --tv-channel-dial-size: clamp(5.8rem, 58%, 8.4rem);
   --tv-volume-dial-size: clamp(4.8rem, 48%, 6.8rem);
   --tv-dial-inset: 0.4rem;
