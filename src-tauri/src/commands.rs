@@ -226,7 +226,9 @@ extern "C" {
 }
 
 /// Clips the native video host to a rounded rectangle so the TV screen's
-/// curved rim, drawn by the webview underneath, stays visible.
+/// curved rim, drawn by the webview underneath, stays visible. `cutouts` are
+/// host-relative rectangles of webview UI (such as the overlay drawers) that
+/// must show through the video.
 #[cfg(target_os = "linux")]
 unsafe fn shape_video_host(
     display: *mut x11::xlib::Display,
@@ -234,9 +236,12 @@ unsafe fn shape_video_host(
     width: u32,
     height: u32,
     radii: [f64; 4],
+    cutouts: &[(i32, i32, u32, u32)],
 ) {
     const SHAPE_BOUNDING: std::os::raw::c_int = 0;
     const SHAPE_SET: std::os::raw::c_int = 0;
+    const SHAPE_SUBTRACT: std::os::raw::c_int = 3;
+    const UNSORTED: std::os::raw::c_int = 0;
     const YX_BANDED: std::os::raw::c_int = 3;
 
     let (mut event_base, mut error_base) = (0, 0);
@@ -263,6 +268,62 @@ unsafe fn shape_video_host(
         SHAPE_SET,
         YX_BANDED,
     );
+    if cutouts.is_empty() {
+        return;
+    }
+    let mut holes: Vec<x11::xlib::XRectangle> = cutouts
+        .iter()
+        .map(|&(x, y, width, height)| x11::xlib::XRectangle {
+            x: x.clamp(i16::MIN.into(), i16::MAX.into()) as i16,
+            y: y.clamp(i16::MIN.into(), i16::MAX.into()) as i16,
+            width: width.min(u16::MAX as u32) as u16,
+            height: height.min(u16::MAX as u32) as u16,
+        })
+        .collect();
+    XShapeCombineRectangles(
+        display,
+        host,
+        SHAPE_BOUNDING,
+        0,
+        0,
+        holes.as_mut_ptr(),
+        holes.len() as std::os::raw::c_int,
+        SHAPE_SUBTRACT,
+        UNSORTED,
+    );
+}
+
+/// Converts CSS-pixel cutouts `[x, y, width, height]` into rectangles relative
+/// to the host at `(host_x, host_y)`, clipped to its `width` x `height`.
+/// Cutouts that miss the host or are invalid are dropped.
+#[cfg(target_os = "linux")]
+fn host_cutouts(
+    cutouts: &[[f64; 4]],
+    device_scale_factor: f64,
+    (host_x, host_y, width, height): (i32, i32, u32, u32),
+) -> Vec<(i32, i32, u32, u32)> {
+    let host_right = i64::from(host_x) + i64::from(width);
+    let host_bottom = i64::from(host_y) + i64::from(height);
+    cutouts
+        .iter()
+        .filter_map(|&[x, y, cutout_width, cutout_height]| {
+            let (left, top, physical_width, physical_height) =
+                physical_video_bounds(x, y, cutout_width, cutout_height, device_scale_factor)
+                    .ok()?;
+            let right = (i64::from(left) + i64::from(physical_width)).min(host_right);
+            let bottom = (i64::from(top) + i64::from(physical_height)).min(host_bottom);
+            let left = i64::from(left).max(i64::from(host_x));
+            let top = i64::from(top).max(i64::from(host_y));
+            (right > left && bottom > top).then(|| {
+                (
+                    (left - i64::from(host_x)) as i32,
+                    (top - i64::from(host_y)) as i32,
+                    (right - left) as u32,
+                    (bottom - top) as u32,
+                )
+            })
+        })
+        .collect()
 }
 
 /// Splits a rounded rectangle into horizontal bands `(x, y, width, height)`,
@@ -711,6 +772,10 @@ pub struct NativeVideoBounds {
     /// Top-left, top-right, bottom-right, bottom-left radii in CSS pixels.
     #[serde(default)]
     corner_radii: Option<[f64; 4]>,
+    /// Webview UI overlapping the video, as `[x, y, width, height]` in CSS
+    /// pixels, cut out of the native window so it is not hidden behind it.
+    #[serde(default)]
+    cutouts: Vec<[f64; 4]>,
 }
 
 #[tauri::command]
@@ -756,7 +821,12 @@ pub fn sync_mpv_video<R: tauri::Runtime>(
                                 .corner_radii
                                 .unwrap_or_default()
                                 .map(|radius| radius * bounds.device_scale_factor);
-                            shape_video_host(hosts.display, host, width, height, radii);
+                            let cutouts = host_cutouts(
+                                &bounds.cutouts,
+                                bounds.device_scale_factor,
+                                (x, y, width, height),
+                            );
+                            shape_video_host(hosts.display, host, width, height, radii, &cutouts);
                             x11::xlib::XMapRaised(hosts.display, host);
                         } else {
                             x11::xlib::XUnmapWindow(hosts.display, host);
@@ -994,9 +1064,9 @@ pub async fn save_playlist_session<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
-    #[cfg(target_os = "linux")]
-    use super::physical_video_bounds;
     use super::{build_audio_filter, expand_drop_paths, rounded_rect_bands, with_level_meter};
+    #[cfg(target_os = "linux")]
+    use super::{host_cutouts, physical_video_bounds};
 
     #[test]
     fn square_corners_produce_one_band() {
@@ -1021,6 +1091,26 @@ mod tests {
         let bands = rounded_rect_bands(20, 20, [f64::NAN, 500.0, -3.0, 0.0]);
         assert!(bands.iter().all(|&(x, _, width, _)| x + width <= 20));
         assert_eq!(bands.iter().map(|band| band.3).sum::<u32>(), 20);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cutouts_are_host_relative_and_clipped() {
+        let host = (100, 50, 400, 300);
+        assert_eq!(
+            host_cutouts(&[[350.0, 40.0, 200.0, 100.0]], 1.0, host),
+            vec![(250, 0, 150, 90)]
+        );
+        assert_eq!(
+            host_cutouts(&[[100.0, 50.0, 10.0, 10.0]], 2.0, host),
+            vec![(100, 50, 20, 20)]
+        );
+        assert!(host_cutouts(
+            &[[0.0, 0.0, 50.0, 50.0], [f64::NAN, 0.0, 1.0, 1.0]],
+            1.0,
+            host
+        )
+        .is_empty());
     }
 
     #[cfg(target_os = "linux")]
