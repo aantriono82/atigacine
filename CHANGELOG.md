@@ -5,6 +5,15 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-25
+
+### Fixed
+
+- In a restored window, the wider 16:10 TV from 0.1.14 was cut off on the
+  left and right. It now scales down to fit.
+- In a narrow window, opening the playlist or equalizer drawer no longer
+  shrinks the TV.
+
 ## [0.1.14] - 2026-10-25
 
 ### Changed
