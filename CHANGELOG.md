@@ -5,6 +5,15 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-10-25
+
+### Fixed
+
+- In a restored or narrow window, the playlist and equalizer drawers opened
+  from the CHANNEL and VOLUME knobs showed behind the playing video. Their area
+  is now cut out of the native video window, including while they slide in
+  and out.
+
 ## [0.1.12] - 2026-10-24
 
 ### Fixed
