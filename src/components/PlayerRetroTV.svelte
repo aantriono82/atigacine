@@ -100,12 +100,16 @@
   const BASE_DESIGN_HEIGHT = 860;
   const BASE_DRAWER_WIDTH = 336;
   const BASE_DRAWER_GAP = 16;
-  const SCALE_MIN = 0.65;
+  const SCALE_MIN = 0.5;
   const SCALE_MAX = 1.9;
   const SAFE_VIEWPORT_MARGIN = 24;
+  // Matches the CSS breakpoint below which drawers float over the TV instead
+  // of taking their own column.
+  const DRAWER_OVERLAY_QUERY = "(max-width: 1240px)";
 
   let playlistOpen = false;
   let drawerLayoutOpen = false;
+  let drawerOverlays = false;
   let stageElement: HTMLElement | undefined;
   let screenElement: HTMLElement | undefined;
   let nativeVideoViewportElement: HTMLElement | undefined;
@@ -148,6 +152,12 @@
   }
 
   onMount(() => {
+    const drawerOverlayQuery = window.matchMedia(DRAWER_OVERLAY_QUERY);
+    const updateDrawerOverlays = (): void => {
+      drawerOverlays = drawerOverlayQuery.matches;
+    };
+    updateDrawerOverlays();
+    drawerOverlayQuery.addEventListener("change", updateDrawerOverlays);
     const scheduleLayoutUpdate = (): void => {
       if (resizeFrame !== undefined) return;
       resizeFrame = window.requestAnimationFrame(() => {
@@ -168,6 +178,7 @@
     window.addEventListener("resize", scheduleLayoutUpdate, { passive: true });
     return () => {
       window.removeEventListener("resize", scheduleLayoutUpdate);
+      drawerOverlayQuery.removeEventListener("change", updateDrawerOverlays);
       resizeObserver?.disconnect();
       if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
       resizeFrame = undefined;
@@ -178,7 +189,7 @@
 
   $: if (equalizerVisible) drawerLayoutOpen = true;
   $: drawerIsOpen = drawerLayoutOpen || playlistOpen || equalizerVisible;
-  $: layoutWidth = drawerIsOpen ? BASE_DESIGN_WIDTH + BASE_DRAWER_GAP + BASE_DRAWER_WIDTH : BASE_DESIGN_WIDTH;
+  $: layoutWidth = drawerIsOpen && !drawerOverlays ? BASE_DESIGN_WIDTH + BASE_DRAWER_GAP + BASE_DRAWER_WIDTH : BASE_DESIGN_WIDTH;
   $: if (stageElement && layoutWidth) updateScale();
 
   $: channelValue = channelCount > 0 ? Math.min(Math.max(currentChannel, 1), channelCount) : 0;
