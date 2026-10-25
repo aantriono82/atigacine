@@ -5,6 +5,14 @@ All notable changes to Atiga Cine are documented here. Release sections use the
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-25
+
+### Changed
+
+- The TV screen is now 16:10 instead of 4:3, so 16:9 videos show only thin
+  black bars above and below instead of thick ones. The cabinet is wider to
+  keep the screen and control panel at their previous height.
+
 ## [0.1.13] - 2026-10-25
 
 ### Fixed
