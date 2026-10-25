@@ -111,6 +111,7 @@
   let nativeVideoViewportElement: HTMLElement | undefined;
   let scaleFactor = 1;
   let resizeFrame: number | undefined;
+  let drawerTransitionFrame: number | undefined;
   const speakerHoles = Array.from({ length: 40 }, (_, index) => index);
   // At full level half of the holes light up; quiet passages light only a few.
   const speakerMaxLitCount = Math.round(speakerHoles.length * 0.5);
@@ -170,6 +171,8 @@
       resizeObserver?.disconnect();
       if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
       resizeFrame = undefined;
+      if (drawerTransitionFrame !== undefined) window.cancelAnimationFrame(drawerTransitionFrame);
+      drawerTransitionFrame = undefined;
     };
   });
 
@@ -214,7 +217,25 @@
     if (playlistOpen && equalizerVisible) onToggleEqualizer();
   }
 
+  // A drawer floating over the screen is cut out of the native video window,
+  // so the cutout has to follow it while it slides in or out.
+  function followDrawerTransition(): void {
+    if (drawerTransitionFrame !== undefined) return;
+    const step = (): void => {
+      onNativeVideoLayout();
+      drawerTransitionFrame = window.requestAnimationFrame(step);
+    };
+    step();
+  }
+
+  function endDrawerTransition(): void {
+    if (drawerTransitionFrame !== undefined) window.cancelAnimationFrame(drawerTransitionFrame);
+    drawerTransitionFrame = undefined;
+    void tick().then(onNativeVideoLayout);
+  }
+
   function handleDrawerOutro(): void {
+    endDrawerTransition();
     if (!playlistOpen && !equalizerVisible) drawerLayoutOpen = false;
   }
 
@@ -414,7 +435,7 @@
     </div>
 
     {#if playlistOpen}
-      <aside class:drop-target={isDropActive && dropZone === "playlist"} class="side-drawer playlist-drawer" aria-label="Playlist drawer" transition:fly={{ x: 320, duration: 240, easing: cubicOut }} onoutroend={handleDrawerOutro}>
+      <aside class:drop-target={isDropActive && dropZone === "playlist"} class="side-drawer playlist-drawer" data-native-video-overlay aria-label="Playlist drawer" transition:fly={{ x: 320, duration: 240, easing: cubicOut }} onintrostart={followDrawerTransition} onintroend={endDrawerTransition} onoutrostart={followDrawerTransition} onoutroend={handleDrawerOutro}>
         <Playlist
           {playlists}
           {activePlaylistId}
@@ -444,7 +465,7 @@
         {/if}
       </aside>
     {:else if equalizerVisible}
-      <aside class="side-drawer equalizer-drawer" aria-label="Equalizer drawer" transition:fly={{ x: 320, duration: 240, easing: cubicOut }} onoutroend={handleDrawerOutro}>
+      <aside class="side-drawer equalizer-drawer" data-native-video-overlay aria-label="Equalizer drawer" transition:fly={{ x: 320, duration: 240, easing: cubicOut }} onintrostart={followDrawerTransition} onintroend={endDrawerTransition} onoutrostart={followDrawerTransition} onoutroend={handleDrawerOutro}>
         <Equalizer
           enabled={equalizerEnabled}
           normalize={equalizerNormalize}

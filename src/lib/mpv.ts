@@ -88,6 +88,8 @@ export async function syncMpvVideo(
     height: number;
     /** Top-left, top-right, bottom-right, bottom-left radii in viewport CSS pixels. */
     cornerRadii?: [number, number, number, number];
+    /** Overlapping webview UI as `[x, y, width, height]` in viewport CSS pixels. */
+    cutouts?: [number, number, number, number][];
   },
   visible: boolean,
 ): Promise<void> {

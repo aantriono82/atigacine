@@ -28,6 +28,21 @@ function viewportCornerRadii(viewport: HTMLElement, rect: DOMRect): [number, num
   ];
 }
 
+/**
+ * Webview UI that overlaps the video, such as the side drawers that float over
+ * the screen in narrow windows. The native window sits above the webview, so
+ * these areas are cut out of it.
+ */
+function overlayCutouts(rect: DOMRect): [number, number, number, number][] {
+  const cutouts: [number, number, number, number][] = [];
+  for (const overlay of document.querySelectorAll<HTMLElement>("[data-native-video-overlay]")) {
+    const box = overlay.getBoundingClientRect();
+    if (box.right <= rect.left || box.left >= rect.right || box.bottom <= rect.top || box.top >= rect.bottom) continue;
+    cutouts.push([box.left, box.top, box.width, box.height]);
+  }
+  return cutouts;
+}
+
 /** Keeps the native mpv child window aligned with the TV screen viewport. */
 export function createNativeVideoSync(options: NativeVideoSyncOptions) {
   let syncFrame: number | undefined;
@@ -47,6 +62,7 @@ export function createNativeVideoSync(options: NativeVideoSyncOptions) {
       width: rect.width,
       height: rect.height,
       cornerRadii: viewportCornerRadii(viewport, rect),
+      cutouts: overlayCutouts(rect),
     };
     void syncMpvVideo(bounds, options.hasMedia()).catch(() => undefined);
   }
